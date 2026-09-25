@@ -24,6 +24,30 @@ describe("API.Bible chapter adapter", () => {
     ]);
   });
 
+  it("parses numbered markers nested inside real provider verse-span wrappers", () => {
+    const verses = parseApiBibleChapterHtml(
+      '<p class="p"><span class="verse-span" data-verse-id="ROM.6.1"><span data-number="1" data-sid="ROM 6:1" class="v">1</span></span>' +
+      '<span class="verse-span" data-verse-id="ROM.6.1">What shall we say then? Shall we continue in sin, that grace may abound? </span>' +
+      '<span class="verse-span" data-verse-id="ROM.6.2"><span data-number="2" data-sid="ROM 6:2" class="v">2</span></span>' +
+      '<span class="verse-span" data-verse-id="ROM.6.2">God forbid. How shall we, that are dead to sin, live any longer therein?</span></p>',
+    );
+    expect(verses).toEqual([
+      { number: 1, text: "What shall we say then? Shall we continue in sin, that grace may abound?" },
+      { number: 2, text: "God forbid. How shall we, that are dead to sin, live any longer therein?" },
+    ]);
+  });
+
+  it("preserves all verse fragments inside additional formatting wrappers", () => {
+    const verses = parseApiBibleChapterHtml(
+      '<span class="verse-span"><span class="v" data-number="5">5</span></span>' +
+      '<span class="verse-span">For if we have been planted together in the likeness of his death, we shall be also </span>' +
+      '<span class="add"><span class="verse-span">in the likeness</span></span>' +
+      '<span class="verse-span"> of </span><span class="add"><span class="verse-span">his</span></span>' +
+      '<span class="verse-span"> resurrection:</span>',
+    );
+    expect(verses).toEqual([{ number: 5, text: "For if we have been planted together in the likeness of his death, we shall be also in the likeness of his resurrection:" }]);
+  });
+
   it("ignores headings and unrelated spans", () => {
     const verses = parseApiBibleChapterHtml(
       '<p class="s1">A heading</p><p class="p"><span class="x">x</span><span class="v" data-number="7">7</span>Verse seven.</p>',

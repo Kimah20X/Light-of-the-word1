@@ -11,14 +11,17 @@
 - [x] Moved the source folder from `server/` to clearly visible `backend/`; updated development/build scripts, client router type import, test imports, and source comments.
 - [x] Added root `README.md`, `backend/README.md`, `docs/SETUP.md`, and `docs/VOICE_AND_COMMANDS.md` to explain navigation, source ownership, commands, env setup, speech behavior, and requirements.
 - [x] Unit tests cover Bible parsing (including spoken `chapter`/`verse` wording), the one-minute listening deadline, voice-command parsing, API.Bible parsing, and account primitives.
+- [x] Voice Save/Bookmark commands save the current verse idempotently, announce saved/already-saved feedback, and persist locally.
+- [x] Backend-local `.env` loading with runtime-secret precedence and Git ignore protection; values configured using the secure project-secrets form.
+- [x] Live API.Bible KJV Romans 6 retrieval passed; nested verse-span parsing corrected; Reader display and chapter cache verified in the browser.
 
 ## Remaining — user configuration/device validation
 
-- [ ] Add server-only `MONGODB_URI`, `APIBIBLE_API_KEY`, and the permitted English KJV `APIBIBLE_BIBLE_ID`.
+- [ ] Resolve MongoDB TLS/network connectivity: the corrected URI is stored and parseable, but all discovered servers reject the TLS handshake. Check Atlas Network Access and cluster availability before retrying.
 - [ ] For native builds, set the public HTTPS backend origin in `EXPO_PUBLIC_API_BASE_URL`, then rebuild the client.
 - [ ] Create/install a custom Expo development build with speech permissions; Expo Go does not include native speech recognition.
 - [ ] On target iOS/Android phones, grant speech/microphone permissions and verify `Open Romans 6`, `Open John chapter 3 verse 16`, `Next verse`, and `Help`; locale availability, especially Hausa, varies by OS/device.
-- [ ] Test real Mongo account registration/login and live API.Bible fetch after configuration.
+- [ ] Test real Mongo account registration/login after the MongoDB connection succeeds. Live Bible fetching is already verified.
 - [ ] Confirm translation rights and deployment-specific FUMS requirements before publishing/monetizing.
 
 ## Not included

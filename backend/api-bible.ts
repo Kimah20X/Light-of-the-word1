@@ -94,14 +94,20 @@ function stripMarkup(html: string) {
 /** Extract API.Bible's documented <span data-number="16" class="v"> verse boundaries. */
 export function parseApiBibleChapterHtml(html: string): ApiBibleVerse[] {
   const spans: Array<{ number: number; start: number; end: number }> = [];
-  const spanPattern = /<span\b([^>]*)>([\s\S]*?)<\/span\s*>/gi;
+  // Match opening tags independently: an outer verse-span may wrap a numbered
+  // marker. Matching complete spans consumes that marker with the outer span.
+  const spanPattern = /<span\b([^>]*)>/gi;
   for (const match of html.matchAll(spanPattern)) {
     const attrs = match[1] ?? "";
     const classMatch = attrs.match(/\bclass\s*=\s*(["'])(.*?)\1/i);
     const numberMatch = attrs.match(/\bdata-number\s*=\s*(["'])(\d+)\1/i);
     if (!classMatch || !numberMatch || !classMatch[2].split(/\s+/).includes("v")) continue;
     const index = match.index ?? 0;
-    spans.push({ number: Number(numberMatch[2]), start: index, end: index + match[0].length });
+    const closingPattern = /<\/span\s*>/gi;
+    closingPattern.lastIndex = index + match[0].length;
+    const closing = closingPattern.exec(html);
+    if (!closing) continue;
+    spans.push({ number: Number(numberMatch[2]), start: index, end: closing.index + closing[0].length });
   }
 
   return spans.map((span, index) => {

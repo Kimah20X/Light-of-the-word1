@@ -1,6 +1,6 @@
 # Project setup
 
-The project has two runtime parts: the Expo mobile app in `app/` and the Express API in `backend/`. The API uses MongoDB for email/password accounts and API.Bible for online KJV chapter downloads. Local bookmarks/preferences remain in the app. No credentials have been added here.
+The project has two runtime parts: the Expo mobile app in `app/` and the Express API in `backend/`. The API uses MongoDB for email/password accounts and API.Bible for online KJV chapter downloads. Local bookmarks/preferences remain in the app. Credential values must never appear in this guide or tracked source files.
 
 ## Where to find the backend
 
@@ -23,6 +23,8 @@ For development on your own machine, the Express backend supports a private **`b
 After adding backend secrets, restart/redeploy the project. `/api/health` checks Express. The `bible.status` query reports only whether provider variables are present; it does not expose the API key. The first chapter fetch verifies the selected Bible metadata and rejects an edition not identified as English KJV. Registration/sign-in shows MongoDB configuration or connection errors until a database is reachable.
 
 Run `pnpm test:integration` from the project root to validate actual credentials. It fetches Romans 6 through the real provider adapter and checks verse 2, then authenticates to MongoDB and pings the configured database. It does not create accounts or prove collection write permissions; registration/login still require a separate end-to-end check. Ordinary `pnpm test` skips these two network checks. No secret values are printed by these checks.
+
+For MongoDB Atlas, the connection URI must start with `mongodb+srv://` or `mongodb://` (no variable-name prefix or surrounding quotes). A valid URI can still fail before authentication if TLS/network access is blocked. Check that the cluster is active, that the backend's actual outbound address is allowed in the Atlas project's Network Access list, and that outbound connections to the cluster port are permitted. Preview and deployed servers can have different outbound addresses. Do not disable TLS certificate validation or open access to all IPs as a default workaround. See [MongoDB's connection troubleshooting guide](https://www.mongodb.com/docs/atlas/troubleshoot-connection/).
 
 ## API.Bible access, offline caching, and rights
 
