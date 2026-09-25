@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import * as Speech from "expo-speech";
+import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import React, { useState } from "react";
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { colors } from "@/components/light-ui";
@@ -20,9 +21,12 @@ export function FloatingVoiceCommand() {
   const [command, setCommand] = useState("");
   const [message, setMessage] = useState("");
   const [speaking, setSpeaking] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
   const book = getBook(reference.book);
 
   const close = () => {
+    if (listening) ExpoSpeechRecognitionModule.abort();
     setVisible(false);
   };
 
@@ -48,8 +52,8 @@ export function FloatingVoiceCommand() {
     });
   };
 
-  const runCommand = () => {
-    const intent = parseVoiceCommand(command);
+  const runCommand = (input: string = command) => {
+    const intent = parseVoiceCommand(input);
     if (!intent) {
       setMessage("Command not recognized. Try “Open Romans 6”, “Next verse”, “Read”, or “Settings”.");
       return;
@@ -119,12 +123,62 @@ export function FloatingVoiceCommand() {
     setCommand("");
   };
 
+  useSpeechRecognitionEvent("start", () => {
+    setListening(true);
+    setMessage("Listening. Say one command, then pause.");
+  });
+  useSpeechRecognitionEvent("end", () => setListening(false));
+  useSpeechRecognitionEvent("result", (event) => {
+    const heard = event.results[0]?.transcript?.trim();
+    if (!heard) return;
+    setTranscript(heard);
+    setCommand(heard);
+    if (event.isFinal) runCommand(heard);
+  });
+  useSpeechRecognitionEvent("error", (event) => {
+    setListening(false);
+    const detail = event.error === "not-allowed"
+      ? "Microphone or speech access was denied. Enable it in your device or browser settings."
+      : event.error === "language-not-supported"
+        ? "This device does not support speech recognition in the selected language. You can type the command instead."
+        : event.error === "no-speech" || event.error === "speech-timeout"
+          ? "I did not hear a command. Try again or type it below."
+          : "Speech recognition is unavailable right now. You can type the command below.";
+    setMessage(detail);
+  });
+
+  const startListening = async () => {
+    setMessage("");
+    setTranscript("");
+    if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+      setMessage("Speech recognition is not available in this browser or build. Type your command below.");
+      return;
+    }
+    try {
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      if (!permission.granted) {
+        setMessage("Microphone and speech-recognition permission are needed. You can still type commands below.");
+        return;
+      }
+      ExpoSpeechRecognitionModule.start({
+        lang: preferences.language === "Hausa" ? "ha-NG" : "en-US",
+        interimResults: true,
+        continuous: false,
+        maxAlternatives: 1,
+        contextualStrings: ["Genesis", "Exodus", "Psalms", "Matthew", "John", "Romans", "Revelation", "chapter", "verse", "bookmark"],
+      });
+    } catch {
+      setListening(false);
+      setMessage("Could not start speech recognition. Type your command below instead.");
+    }
+  };
+
   return (
     <>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Voice command"
-        accessibilityHint="Opens quick voice-style Bible commands. Speech recognition requires a platform voice service; typed commands work here."
+        accessibilityHint="Opens spoken Bible commands when your device or browser supports speech recognition, with a typed command option."
         accessibilityState={{ expanded: visible }}
         onPress={() => { setMessage(""); setVisible(true); }}
         style={({ pressed }) => [styles.fab, pathname === "/onboarding" && styles.onboardingFab, (pathname === "/navigate" || pathname === "/bookmarks") && styles.greenFab, pathname.includes("settings") && styles.settingsFab, pressed && styles.pressed, { right: horizontalOffset, bottom: pathname === "/onboarding" ? 200 + insets.bottom : 92 + insets.bottom }]}
@@ -151,14 +205,14 @@ export function FloatingVoiceCommand() {
 
             <View style={styles.statusBox}>
               <Ionicons name="information-circle-outline" size={19} color={colors.amber} />
-              <Text style={styles.statusText}>Type a command below. Direct device speech recognition is not connected in this preview.</Text>
+              <Text style={styles.statusText}>Speak one command or type it below. A secure browser/device speech service is required for recognition.</Text>
             </View>
 
             <View style={styles.inputRow}>
               <TextInput
                 value={command}
                 onChangeText={setCommand}
-                onSubmitEditing={runCommand}
+                onSubmitEditing={() => runCommand()}
                 returnKeyType="go"
                 accessibilityLabel="Voice command text"
                 accessibilityHint="For example, Open Romans 6:2, Next verse, or Bookmark this verse"
@@ -166,10 +220,23 @@ export function FloatingVoiceCommand() {
                 placeholderTextColor="#898581"
                 style={styles.input}
               />
-              <Pressable accessibilityRole="button" accessibilityLabel="Run voice command" onPress={runCommand} style={styles.runButton}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Run voice command" onPress={() => runCommand()} style={styles.runButton}>
                 <Ionicons name="arrow-forward" size={22} color={colors.tealInk} />
               </Pressable>
             </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={listening ? "Stop listening" : "Speak a command"}
+              accessibilityHint={listening ? "Ends speech recognition and processes the command heard" : "Requests microphone permission and listens for one Bible command"}
+              accessibilityState={{ selected: listening }}
+              onPress={() => listening ? ExpoSpeechRecognitionModule.stop() : void startListening()}
+              style={[styles.listenButton, listening && styles.listenButtonActive]}
+            >
+              <Ionicons name={listening ? "stop-circle-outline" : "mic-outline"} size={22} color={colors.tealInk} />
+              <Text style={styles.listenButtonText}>{listening ? "Listening… Tap to stop" : "Speak a command"}</Text>
+            </Pressable>
+            {transcript ? <Text accessibilityLiveRegion="polite" style={styles.transcript}>Heard: {transcript}</Text> : null}
 
             <View style={styles.shortcutRow}>
               <Pressable accessibilityRole="button" onPress={() => { setCommand("Open Romans 6"); }} style={styles.shortcut}><Text style={styles.shortcutText}>Romans 6</Text></Pressable>
@@ -178,7 +245,7 @@ export function FloatingVoiceCommand() {
             </View>
 
             {message ? <Text accessibilityRole="alert" style={styles.message}>{message}</Text> : null}
-            <Text style={styles.example}>Also try: “Previous chapter”, “Repeat”, “Bookmark this verse”, “Profile”, or “Change speed to 1.25”.</Text>
+            <Text style={styles.example}>Your device/browser’s recognition service processes speech; its internet and privacy behavior depends on that service. The app does not send recordings to our backend. If recognition is unavailable, type commands below. Also try “Previous chapter”, “Repeat”, “Bookmark this verse”, or “Change speed to 1.25”.</Text>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -206,6 +273,10 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   input: { flex: 1, minHeight: 54, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, color: colors.text, fontSize: 16 },
   runButton: { width: 56, height: 54, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.tealBright },
+  listenButton: { minHeight: 54, marginTop: 12, borderRadius: 11, backgroundColor: colors.tealBright, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
+  listenButtonActive: { backgroundColor: colors.amberSoft },
+  listenButtonText: { color: colors.tealInk, fontSize: 16, fontWeight: "800" },
+  transcript: { color: colors.text, fontSize: 14, lineHeight: 20, marginTop: 8 },
   shortcutRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 11 },
   shortcut: { minHeight: 42, paddingHorizontal: 12, justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceRaised },
   shortcutText: { color: colors.text, fontSize: 13, fontWeight: "600" },

@@ -4,7 +4,7 @@ import {
   hashSessionToken,
   normalizeAccountEmail,
   verifyAccountPassword,
-} from "../server/account-auth";
+} from "../backend/account-auth";
 
 describe("MongoDB password account primitives", () => {
   it("normalizes email addresses for consistent lookup", () => {

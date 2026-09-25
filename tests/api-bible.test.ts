@@ -4,7 +4,7 @@ import {
   isKjvBibleMetadata,
   parseApiBibleChapterHtml,
   validateApiBibleReference,
-} from "../server/api-bible";
+} from "../backend/api-bible";
 import { BIBLE_BOOKS } from "../lib/bible-catalog";
 
 describe("API.Bible chapter adapter", () => {

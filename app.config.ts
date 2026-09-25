@@ -89,6 +89,14 @@ const config: ExpoConfig = {
     "expo-font",
     "expo-web-browser",
     [
+      "expo-speech-recognition",
+      {
+        microphonePermission: "Allow LIGHT OF THE WORD to use the microphone for voice commands.",
+        speechRecognitionPermission: "Allow LIGHT OF THE WORD to recognize Bible navigation and reading commands.",
+        androidSpeechServicePackages: ["com.google.android.googlequicksearchbox"],
+      },
+    ],
+    [
       "expo-audio",
       {
         microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
