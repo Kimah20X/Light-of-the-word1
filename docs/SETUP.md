@@ -8,7 +8,9 @@ Open the project root and then `backend/`. The Express entry point is `backend/_
 
 ## Configure the services
 
-Add private variables through WebDev/server runtime secrets, or in a private local `.env` for local development. Never commit a populated `.env`. **Do not** expose database credentials or the API key in `EXPO_PUBLIC_` variables.
+For hosted development/deployment, add private variables through WebDev's secure project-secrets form. They are injected into the backend environment; a physical `backend/.env` file is not required or promised by the hosted secret manager.
+
+For development on your own machine, the Express backend supports a private **`backend/.env`** file. Run the project scripts from the repository root. Loading order is: injected runtime environment first, then `backend/.env`, then the root `.env` for compatibility. Local files never override injected runtime values. `.gitignore` excludes root and nested `.env` files. Never commit credentials or expose database credentials/API keys in `EXPO_PUBLIC_` variables.
 
 | Setting | Where | Purpose |
 |---|---|---|
@@ -19,6 +21,8 @@ Add private variables through WebDev/server runtime secrets, or in a private loc
 | `EXPO_PUBLIC_API_BASE_URL` | Expo client build setting for native apps | Public HTTPS origin of the deployed Express API, reachable from the phone. The hosted web preview derives the API origin automatically. |
 
 After adding backend secrets, restart/redeploy the project. `/api/health` checks Express. The `bible.status` query reports only whether provider variables are present; it does not expose the API key. The first chapter fetch verifies the selected Bible metadata and rejects an edition not identified as English KJV. Registration/sign-in shows MongoDB configuration or connection errors until a database is reachable.
+
+Run `pnpm test:integration` from the project root to validate actual credentials. It fetches Romans 6 through the real provider adapter and checks verse 2, then authenticates to MongoDB and pings the configured database. It does not create accounts or prove collection write permissions; registration/login still require a separate end-to-end check. Ordinary `pnpm test` skips these two network checks. No secret values are printed by these checks.
 
 ## API.Bible access, offline caching, and rights
 

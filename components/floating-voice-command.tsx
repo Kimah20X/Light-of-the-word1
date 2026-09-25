@@ -12,10 +12,10 @@ import { useBibleChapter } from "@/lib/use-bible-chapter";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const RESTART_AFTER_SILENCE_MS = 900;
-const VOICE_HELP = "You can say: Open Romans 6, Open John 3 verse 16, Next verse, Previous chapter, Read, Pause, Repeat, Bookmark this verse, Settings, or Help. I will listen for up to one minute, so take your time.";
+const VOICE_HELP = "You can say: Open Romans 6, Open John chapter 3 verse 16, Next verse, Previous chapter, Read, Pause, Repeat, Save this verse, Settings, or Help. I will listen for up to one minute, so take your time.";
 
 export function FloatingVoiceCommand() {
-  const { reference, setReference, toggleBookmark, preferences, updatePreferences, voiceControllerActive, setVoiceControllerActive } = useAppState();
+  const { reference, setReference, saveCurrentBookmark, preferences, updatePreferences, voiceControllerActive, setVoiceControllerActive } = useAppState();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const viewport = useWindowDimensions();
@@ -212,8 +212,9 @@ export function FloatingVoiceCommand() {
         announceAndListen("Reading paused. Say Read or Resume when you want to continue.");
         break;
       case "bookmark":
-        toggleBookmark();
-        announceAndListen(`Bookmark updated for ${formatReference(reference)}.`);
+        announceAndListen(saveCurrentBookmark()
+          ? `Saved ${formatReference(reference)} to Bookmarks for later reading.`
+          : `${formatReference(reference)} is already saved in Bookmarks.`);
         break;
       case "home":
         router.navigate("/");
@@ -251,7 +252,7 @@ export function FloatingVoiceCommand() {
         break;
     }
     setCommand("");
-  }, [announceAndListen, bible.isLoading, bible.verseText, clearTimers, moveChapter, preferences, reference, setReference, speakHelp, toggleBookmark, updatePreferences]);
+  }, [announceAndListen, bible.isLoading, bible.verseText, clearTimers, moveChapter, preferences, reference, saveCurrentBookmark, setReference, speakHelp, updatePreferences]);
 
   useSpeechRecognitionEvent("start", () => {
     setListening(true);

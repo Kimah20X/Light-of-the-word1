@@ -13,6 +13,7 @@
     "lint": "expo lint",
     "format": "prettier --write .",
     "test": "vitest run",
+    "test:integration": "cross-env RUN_LIVE_INTEGRATION_TESTS=1 vitest run tests/live-integrations.test.ts",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "android": "expo start --android",
     "ios": "expo start --ios",

@@ -32,7 +32,7 @@ export function parseVoiceCommand(input: string): VoiceCommandIntent | null {
   if (/^(pause|stop|stop reading)$/i.test(phrase)) return { type: "pause" };
   if (/^(help|voice help|what can i say|what commands can i say|list commands)$/i.test(phrase)) return { type: "help" };
   if (/^repeat( this verse)?$/i.test(phrase)) return { type: "repeat" };
-  if (/^(bookmark|bookmark this verse|save this verse)$/i.test(phrase)) return { type: "bookmark" };
+  if (/^(?:bookmark|save|(?:bookmark|save) (?:this|current) verse|bookmark verse|save verse|add bookmark)$/i.test(phrase)) return { type: "bookmark" };
   if (/^(go\s+)?home$/i.test(phrase)) return { type: "home" };
   if (/^(go\s+to\s+)?settings$/i.test(phrase)) return { type: "settings" };
   if (/^(go\s+to\s+)?bookmarks$/i.test(phrase)) return { type: "bookmarks" };

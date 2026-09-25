@@ -29,7 +29,12 @@ describe("voice command parser", () => {
     expect(parseVoiceCommand("Resume")).toEqual({ type: "read" });
     expect(parseVoiceCommand("Pause")).toEqual({ type: "pause" });
     expect(parseVoiceCommand("Repeat this verse")).toEqual({ type: "repeat" });
+    expect(parseVoiceCommand("Bookmark")).toEqual({ type: "bookmark" });
     expect(parseVoiceCommand("Bookmark this verse")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Save this verse")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Save current verse")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Bookmark current verse")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Add bookmark")).toEqual({ type: "bookmark" });
   });
 
   it("supports spoken help requests", () => {

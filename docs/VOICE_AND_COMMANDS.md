@@ -25,12 +25,14 @@ Speech recognition is provided by the browser/OS service rather than the Express
 | Open a reference | `Open Romans 6`, `Open John 3:16`, `Open John chapter 3 verse 16` |
 | Move reading position | `Next verse`, `Previous verse`, `Next chapter`, `Previous chapter` |
 | Read controls | `Read`, `Pause`, `Resume`, `Repeat` |
-| Local bookmark | `Bookmark this verse`, `Save this verse` |
+| Local bookmark | `Bookmark this verse`, `Save this verse`, `Save current verse`, `Add bookmark` |
 | App navigation | `Home`, `Settings`, `Bookmarks`, `Profile` |
 | Reading rate | `Faster`, `Slower`, `Change speed to 1.25` |
 | Spoken instructions | `Help`, `What commands can I say?` |
 
 Recognition quality varies. The controller displays the transcript and gives a spoken confirmation so the reader can tell what it heard. If the reference was misheard, try again or use the keyboard button. Commands are local app actions; they do not send a conversation or scripture question to an AI service.
+
+Save/bookmark commands add the **currently displayed verse** to the device-local Bookmarks list for later reading. Repeating the command confirms it is already saved; it never removes the verse. The Reader's bookmark button remains a separate toggle for adding/removing a saved verse.
 
 ## Native setup you need to do
 

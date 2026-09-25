@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { saveBookmarkIfMissing } from "./bookmark-utils";
 
 export type BibleReference = { book: string; chapter: number; verse: number };
 export type Bookmark = BibleReference & { id: string };
@@ -16,6 +17,7 @@ type AppStateValue = {
   setReference: (next: BibleReference) => void;
   bookmarks: Bookmark[];
   toggleBookmark: () => void;
+  saveCurrentBookmark: () => boolean;
   removeBookmark: (id: string) => void;
   isBookmarked: boolean;
   preferences: AppPreferences;
@@ -93,6 +95,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       ? current.filter((item) => item.id !== id)
       : [...current, { ...reference, id }]);
   }, [reference]);
+  const saveCurrentBookmark = useCallback(() => {
+    const result = saveBookmarkIfMissing(bookmarks, reference);
+    setBookmarks((current) => saveBookmarkIfMissing(current, reference).bookmarks);
+    return result.added;
+  }, [bookmarks, reference]);
   const removeBookmark = useCallback((id: string) => {
     setBookmarks((current) => current.filter((item) => item.id !== id));
   }, []);
@@ -111,6 +118,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setReference,
     bookmarks,
     toggleBookmark,
+    saveCurrentBookmark,
     removeBookmark,
     isBookmarked: bookmarks.some((item) => item.id === referenceId(reference)),
     preferences,
@@ -120,7 +128,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setOnboardingComplete,
     voiceControllerActive,
     setVoiceControllerActive: setVoiceControllerActiveState,
-  }), [reference, setReference, bookmarks, toggleBookmark, removeBookmark, preferences, updatePreferences, hydrated, onboardingComplete, setOnboardingComplete, voiceControllerActive, setVoiceControllerActiveState]);
+  }), [reference, setReference, bookmarks, toggleBookmark, saveCurrentBookmark, removeBookmark, preferences, updatePreferences, hydrated, onboardingComplete, setOnboardingComplete, voiceControllerActive, setVoiceControllerActiveState]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }
