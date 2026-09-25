@@ -9,7 +9,7 @@ import { BIBLE_BOOKS, parseBibleReference, type BibleBook, type Testament } from
 const TESTAMENTS: Testament[] = ["Old Testament", "New Testament"];
 
 export default function NavigateScreen() {
-  const { setReference, reference, setVoiceCommandOpen } = useAppState();
+  const { setReference, reference, setVoiceControllerActive } = useAppState();
   const [search, setSearch] = useState("");
   const [selectedBook, setSelectedBook] = useState<BibleBook | null>(null);
   const [chapter, setChapter] = useState(1);
@@ -60,9 +60,9 @@ export default function NavigateScreen() {
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={directReference ? "Open typed Bible reference" : "Open voice command"}
-            accessibilityHint={directReference ? "Opens the Bible reader at this passage" : "Opens voice-style Bible commands"}
-            onPress={() => { if (!openDirect()) setVoiceCommandOpen(true); }}
+            accessibilityLabel={directReference ? "Open typed Bible reference" : "Start voice controller and listen for a Bible reference"}
+            accessibilityHint={directReference ? "Opens the Bible reader at this passage" : "Starts listening immediately. Say a Bible book, chapter, and verse."}
+            onPress={() => { if (!openDirect()) setVoiceControllerActive(true); }}
             style={styles.searchMic}
           >
             <Ionicons name={directReference ? "arrow-forward" : "mic"} size={22} color={colors.tealBright} />

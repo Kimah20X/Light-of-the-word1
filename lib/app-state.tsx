@@ -23,8 +23,8 @@ type AppStateValue = {
   hydrated: boolean;
   onboardingComplete: boolean;
   setOnboardingComplete: (complete: boolean) => void;
-  voiceCommandOpen: boolean;
-  setVoiceCommandOpen: (open: boolean) => void;
+  voiceControllerActive: boolean;
+  setVoiceControllerActive: (active: boolean) => void;
 };
 
 type PersistedState = {
@@ -56,7 +56,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [hydrated, setHydrated] = useState(false);
   const [onboardingComplete, setOnboardingCompleteState] = useState(false);
-  const [voiceCommandOpen, setVoiceCommandOpen] = useState(false);
+  const [voiceControllerActive, setVoiceControllerActive] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -102,8 +102,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const setOnboardingComplete = useCallback((complete: boolean) => {
     setOnboardingCompleteState(complete);
   }, []);
-  const setVoiceCommandOpenState = useCallback((open: boolean) => {
-    setVoiceCommandOpen(open);
+  const setVoiceControllerActiveState = useCallback((active: boolean) => {
+    setVoiceControllerActive(active);
   }, []);
 
   const value = useMemo(() => ({
@@ -118,9 +118,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     hydrated,
     onboardingComplete,
     setOnboardingComplete,
-    voiceCommandOpen,
-    setVoiceCommandOpen: setVoiceCommandOpenState,
-  }), [reference, setReference, bookmarks, toggleBookmark, removeBookmark, preferences, updatePreferences, hydrated, onboardingComplete, setOnboardingComplete, voiceCommandOpen, setVoiceCommandOpenState]);
+    voiceControllerActive,
+    setVoiceControllerActive: setVoiceControllerActiveState,
+  }), [reference, setReference, bookmarks, toggleBookmark, removeBookmark, preferences, updatePreferences, hydrated, onboardingComplete, setOnboardingComplete, voiceControllerActive, setVoiceControllerActiveState]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

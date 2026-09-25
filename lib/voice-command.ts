@@ -5,7 +5,7 @@ export type VoiceCommandIntent =
   | { type: "open"; reference: BibleReference }
   | { type: "nextVerse" | "previousVerse" | "nextChapter" | "previousChapter" }
   | { type: "read" | "pause" | "repeat" | "bookmark" }
-  | { type: "home" | "settings" | "bookmarks" | "profile" }
+  | { type: "home" | "settings" | "bookmarks" | "profile" | "help" }
   | { type: "speed"; value: number }
   | { type: "faster" | "slower" };
 
@@ -30,6 +30,7 @@ export function parseVoiceCommand(input: string): VoiceCommandIntent | null {
   if (/^(previous|prev|back)\s+chapter$/i.test(phrase)) return { type: "previousChapter" };
   if (/^(read|resume|play|start reading)$/i.test(phrase)) return { type: "read" };
   if (/^(pause|stop|stop reading)$/i.test(phrase)) return { type: "pause" };
+  if (/^(help|voice help|what can i say|what commands can i say|list commands)$/i.test(phrase)) return { type: "help" };
   if (/^repeat( this verse)?$/i.test(phrase)) return { type: "repeat" };
   if (/^(bookmark|bookmark this verse|save this verse)$/i.test(phrase)) return { type: "bookmark" };
   if (/^(go\s+)?home$/i.test(phrase)) return { type: "home" };
@@ -48,3 +49,9 @@ export function parseVoiceCommand(input: string): VoiceCommandIntent | null {
 }
 
 export const READING_SPEEDS = [0.75, 1, 1.25, 1.5] as const;
+
+export const VOICE_LISTENING_WINDOW_MS = 60_000;
+
+export function shouldResumeAfterPause(deadline: number, now: number, hasFinalResult: boolean) {
+  return !hasFinalResult && deadline > 0 && now < deadline;
+}

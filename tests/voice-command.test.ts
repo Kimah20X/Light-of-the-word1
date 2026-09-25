@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseVoiceCommand } from "../lib/voice-command";
+import { parseVoiceCommand, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "../lib/voice-command";
 
 describe("voice command parser", () => {
   it("opens a book, chapter, or verse reference", () => {
@@ -8,6 +8,10 @@ describe("voice command parser", () => {
       reference: { book: "Romans", chapter: 6, verse: 1 },
     });
     expect(parseVoiceCommand("Open John 3:16")).toEqual({
+      type: "open",
+      reference: { book: "John", chapter: 3, verse: 16 },
+    });
+    expect(parseVoiceCommand("Open John chapter 3 verse 16")).toEqual({
       type: "open",
       reference: { book: "John", chapter: 3, verse: 16 },
     });
@@ -26,6 +30,19 @@ describe("voice command parser", () => {
     expect(parseVoiceCommand("Pause")).toEqual({ type: "pause" });
     expect(parseVoiceCommand("Repeat this verse")).toEqual({ type: "repeat" });
     expect(parseVoiceCommand("Bookmark this verse")).toEqual({ type: "bookmark" });
+  });
+
+  it("supports spoken help requests", () => {
+    expect(parseVoiceCommand("Help")).toEqual({ type: "help" });
+    expect(parseVoiceCommand("What commands can I say?")).toEqual({ type: "help" });
+  });
+
+  it("keeps pause retries inside the one-minute listening window", () => {
+    const deadline = 120_000 + VOICE_LISTENING_WINDOW_MS;
+    expect(VOICE_LISTENING_WINDOW_MS).toBe(60_000);
+    expect(shouldResumeAfterPause(deadline, 120_001, false)).toBe(true);
+    expect(shouldResumeAfterPause(deadline, deadline, false)).toBe(false);
+    expect(shouldResumeAfterPause(deadline, 120_001, true)).toBe(false);
   });
 
   it("supports app destinations and common speed adjustments", () => {

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Speech from "expo-speech";
 import React, { useState } from "react";
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { Card, colors, IconButton, PrimaryButton, Screen, SectionTitle } from "@/components/light-ui";
+import { Card, colors, IconButton, Screen, SectionTitle } from "@/components/light-ui";
 import { formatReference, useAppState } from "@/lib/app-state";
 import { getBook } from "@/lib/bible-catalog";
 import { getPreviewVerseText } from "@/lib/preview-verses";
@@ -10,7 +10,7 @@ import { useBibleChapter } from "@/lib/use-bible-chapter";
 import { ApiBibleFumsReporter } from "@/components/api-bible-fums";
 
 export default function ReaderScreen() {
-  const { reference, setReference, toggleBookmark, isBookmarked, preferences, updatePreferences, setVoiceCommandOpen } = useAppState();
+  const { reference, setReference, toggleBookmark, isBookmarked, preferences, updatePreferences } = useAppState();
   const [speaking, setSpeaking] = useState(false);
   const key = formatReference(reference);
   const bible = useBibleChapter();
@@ -129,7 +129,6 @@ export default function ReaderScreen() {
         ))}
       </View>
 
-      <PrimaryButton label="Tap to speak a command" icon="mic" hint="Opens accessible typed Bible voice commands" onPress={() => setVoiceCommandOpen(true)} />
       <View style={{ height: 14 }} />
     </Screen>
   );

@@ -43,7 +43,13 @@ export function getBook(name: string) {
 }
 
 export function parseBibleReference(input: string) {
-  const normalized = input.trim().replace(/[.]/g, ":");
+  const normalized = input.trim()
+    .replace(/\bchapter\s+/gi, " ")
+    .replace(/\bverse\s+/gi, ":")
+    .replace(/\bcolon\b/gi, ":")
+    .replace(/[.]/g, ":")
+    .replace(/\s*:\s*/g, ":")
+    .replace(/\s+/g, " ");
   const match = normalized.match(/^(.+?)\s+(\d+)(?::(\d+))?$/);
   if (!match) return null;
   const book = BIBLE_BOOKS.find((item) => item.name.toLowerCase() === match[1].trim().toLowerCase());

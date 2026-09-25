@@ -18,6 +18,11 @@ describe("KJV navigation catalog", () => {
     expect(parseBibleReference("john 3:16")).toEqual({ book: "John", chapter: 3, verse: 16 });
   });
 
+  it("parses natural spoken chapter and verse references", () => {
+    expect(parseBibleReference("John chapter 3 verse 16")).toEqual({ book: "John", chapter: 3, verse: 16 });
+    expect(parseBibleReference("Romans 6 verse 2")).toEqual({ book: "Romans", chapter: 6, verse: 2 });
+  });
+
   it("rejects unknown books and out-of-range chapters", () => {
     expect(parseBibleReference("Not a Book 4:2")).toBeNull();
     expect(parseBibleReference("Romans 17:1")).toBeNull();

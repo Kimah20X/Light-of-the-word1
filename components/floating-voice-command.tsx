@@ -2,17 +2,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import * as Speech from "expo-speech";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
-import React, { useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { colors } from "@/components/light-ui";
 import { formatReference, useAppState } from "@/lib/app-state";
 import { getBook } from "@/lib/bible-catalog";
-import { getPreviewVerseText } from "@/lib/preview-verses";
-import { parseVoiceCommand, READING_SPEEDS } from "@/lib/voice-command";
+import { parseVoiceCommand, READING_SPEEDS, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "@/lib/voice-command";
+import { useBibleChapter } from "@/lib/use-bible-chapter";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+const RESTART_AFTER_SILENCE_MS = 900;
+const VOICE_HELP = "You can say: Open Romans 6, Open John 3 verse 16, Next verse, Previous chapter, Read, Pause, Repeat, Bookmark this verse, Settings, or Help. I will listen for up to one minute, so take your time.";
+
 export function FloatingVoiceCommand() {
-  const { reference, setReference, toggleBookmark, preferences, updatePreferences, voiceCommandOpen: visible, setVoiceCommandOpen: setVisible } = useAppState();
+  const { reference, setReference, toggleBookmark, preferences, updatePreferences, voiceControllerActive, setVoiceControllerActive } = useAppState();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const viewport = useWindowDimensions();
@@ -20,93 +23,217 @@ export function FloatingVoiceCommand() {
   const horizontalOffset = Math.max(18, (viewport.width - shellWidth) / 2 + 18);
   const [command, setCommand] = useState("");
   const [message, setMessage] = useState("");
-  const [speaking, setSpeaking] = useState(false);
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [typing, setTyping] = useState(false);
+  const bible = useBibleChapter();
+  const sessionDeadline = useRef(0);
+  const receivedFinalResult = useRef(false);
+  const permissionGranted = useRef(false);
+  const recognitionAllowed = useRef(false);
+  const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const windowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const book = getBook(reference.book);
 
-  const close = () => {
-    if (listening) ExpoSpeechRecognitionModule.abort();
-    setVisible(false);
-  };
+  const clearTimers = useCallback(() => {
+    if (restartTimer.current) clearTimeout(restartTimer.current);
+    if (windowTimer.current) clearTimeout(windowTimer.current);
+    restartTimer.current = null;
+    windowTimer.current = null;
+  }, []);
 
-  const moveChapter = (delta: number) => {
+  const closeController = useCallback(() => {
+    sessionDeadline.current = 0;
+    clearTimers();
+    ExpoSpeechRecognitionModule.abort();
+    Speech.stop();
+    recognitionAllowed.current = false;
+    setListening(false);
+    setTyping(false);
+    setVoiceControllerActive(false);
+  }, [clearTimers, setVoiceControllerActive]);
+
+  const moveChapter = useCallback((delta: number) => {
     const chapter = Math.max(1, Math.min(book?.chapters ?? reference.chapter, reference.chapter + delta));
-    setReference({ ...reference, chapter, verse: 1 });
-  };
+    const next = { ...reference, chapter, verse: 1 };
+    setReference(next);
+    return next;
+  }, [book?.chapters, reference, setReference]);
 
-  const readCurrentVerse = () => {
-    const text = getPreviewVerseText(reference);
-    if (!text) {
-      setMessage("This verse is not in the preview sample. Connect the complete offline KJV dataset for speech on all verses.");
+  const startRecognizer = useCallback(async () => {
+    if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+      sessionDeadline.current = 0;
+      clearTimers();
+      setListening(false);
+      setMessage("Speech recognition is unavailable here. You can type a command below.");
+      setTyping(true);
+      recognitionAllowed.current = false;
       return;
     }
-    Speech.stop();
-    setSpeaking(true);
-    Speech.speak(`${formatReference(reference)}. ${text}`, {
-      rate: preferences.speed,
-      language: preferences.language === "Hausa" ? "ha-NG" : "en-US",
-      onDone: () => setSpeaking(false),
-      onStopped: () => setSpeaking(false),
-      onError: () => setSpeaking(false),
-    });
-  };
+    try {
+      if (!permissionGranted.current) {
+        const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+        if (!permission.granted) {
+          sessionDeadline.current = 0;
+          clearTimers();
+          setListening(false);
+          setTyping(true);
+          setMessage("Microphone and speech access are needed. You can still type a command below.");
+          recognitionAllowed.current = false;
+          return;
+        }
+        permissionGranted.current = true;
+      }
+      recognitionAllowed.current = true;
+      receivedFinalResult.current = false;
+      Speech.stop();
+      if (!sessionDeadline.current) {
+        sessionDeadline.current = Date.now() + VOICE_LISTENING_WINDOW_MS;
+        windowTimer.current = setTimeout(() => {
+          sessionDeadline.current = 0;
+          clearTimers();
+          ExpoSpeechRecognitionModule.abort();
+          setListening(false);
+          setMessage("Listening paused after one minute. Tap Listen again when you are ready.");
+        }, VOICE_LISTENING_WINDOW_MS);
+      }
+      ExpoSpeechRecognitionModule.start({
+        lang: preferences.language === "Hausa" ? "ha-NG" : "en-US",
+        interimResults: true,
+        continuous: false,
+        maxAlternatives: 1,
+        contextualStrings: ["Genesis", "Exodus", "Psalms", "Matthew", "John", "Romans", "Revelation", "chapter", "verse", "bookmark", "settings"],
+      });
+    } catch {
+      sessionDeadline.current = 0;
+      clearTimers();
+      setListening(false);
+      setTyping(true);
+      setMessage("Could not start speech recognition. You can type a command below or try again.");
+      recognitionAllowed.current = false;
+    }
+  }, [clearTimers, preferences.language]);
 
-  const runCommand = (input: string = command) => {
+  const beginVoiceWindow = useCallback(async () => {
+    clearTimers();
+    sessionDeadline.current = 0;
+    receivedFinalResult.current = false;
+    setTranscript("");
+    setMessage("Starting the voice controller. I will listen for up to one minute; take your time.");
+    setTyping(false);
+    await startRecognizer();
+  }, [clearTimers, startRecognizer]);
+
+  const announceAndListen = useCallback((spokenMessage: string) => {
+    clearTimers();
+    sessionDeadline.current = 0;
+    ExpoSpeechRecognitionModule.abort();
+    setListening(false);
+    setMessage(spokenMessage);
+    Speech.stop();
+    Speech.speak(spokenMessage, {
+      language: preferences.language === "Hausa" ? "ha-NG" : "en-US",
+      rate: preferences.speed,
+      onDone: () => {
+        if (voiceControllerActive && recognitionAllowed.current) void beginVoiceWindow();
+      },
+      onError: () => {
+        setMessage(spokenMessage);
+        if (voiceControllerActive && recognitionAllowed.current) {
+          restartTimer.current = setTimeout(() => {
+            restartTimer.current = null;
+            void beginVoiceWindow();
+          }, 1200);
+        }
+      },
+    });
+  }, [beginVoiceWindow, clearTimers, preferences.language, preferences.speed, voiceControllerActive]);
+
+  const speakHelp = useCallback(() => announceAndListen(VOICE_HELP), [announceAndListen]);
+
+  const runCommand = useCallback((input: string) => {
     const intent = parseVoiceCommand(input);
     if (!intent) {
-      setMessage("Command not recognized. Try “Open Romans 6”, “Next verse”, “Read”, or “Settings”.");
+      announceAndListen(`I heard “${input.trim()}”, but could not match it to a command. Say Help for examples, or try again.`);
+      setTyping(true);
       return;
     }
-    setMessage("");
+    setCommand("");
     switch (intent.type) {
       case "open":
         setReference(intent.reference);
-        close();
+        announceAndListen(`Opening ${formatReference(intent.reference)}.`);
         return;
-      case "nextVerse":
-        setReference({ ...reference, verse: reference.verse + 1 });
+      case "nextVerse": {
+        const next = { ...reference, verse: reference.verse + 1 };
+        setReference(next);
+        announceAndListen(`Moved to ${formatReference(next)}.`);
         break;
-      case "previousVerse":
-        setReference({ ...reference, verse: Math.max(1, reference.verse - 1) });
+      }
+      case "previousVerse": {
+        const previous = { ...reference, verse: Math.max(1, reference.verse - 1) };
+        setReference(previous);
+        announceAndListen(`Moved to ${formatReference(previous)}.`);
         break;
-      case "nextChapter":
-        moveChapter(1);
+      }
+      case "nextChapter": {
+        const next = moveChapter(1);
+        announceAndListen(`Moved to ${next.book} chapter ${next.chapter}.`);
         break;
-      case "previousChapter":
-        moveChapter(-1);
+      }
+      case "previousChapter": {
+        const previous = moveChapter(-1);
+        announceAndListen(`Moved to ${previous.book} chapter ${previous.chapter}.`);
         break;
+      }
       case "read":
-      case "repeat":
-        readCurrentVerse();
+      case "repeat": {
+        const text = bible.verseText;
+        if (!text) {
+          announceAndListen(bible.isLoading ? "I am still loading this verse. Please wait a moment, then say Read again." : "This verse text is not available yet. Connect the KJV source or open a downloaded chapter, then say Read again.");
+          break;
+        }
+        clearTimers();
+        sessionDeadline.current = 0;
+        ExpoSpeechRecognitionModule.abort();
+        setListening(false);
+        setMessage(`Reading ${formatReference(reference)}. I will listen again when the verse finishes.`);
+        Speech.stop();
+        Speech.speak(`${formatReference(reference)}. ${text}`, {
+          rate: preferences.speed,
+          language: preferences.language === "Hausa" ? "ha-NG" : "en-US",
+          onDone: () => announceAndListen(`Finished reading ${formatReference(reference)}.`),
+          onError: () => announceAndListen("Text to speech is unavailable on this device."),
+        });
         break;
+      }
       case "pause":
         Speech.stop();
-        setSpeaking(false);
+        announceAndListen("Reading paused. Say Read or Resume when you want to continue.");
         break;
       case "bookmark":
         toggleBookmark();
-        setMessage(`Bookmark updated for ${formatReference(reference)}.`);
+        announceAndListen(`Bookmark updated for ${formatReference(reference)}.`);
         break;
       case "home":
         router.navigate("/");
-        close();
+        announceAndListen("Opening Home.");
         return;
       case "settings":
         router.navigate("/(tabs)/settings");
-        close();
+        announceAndListen("Opening Settings.");
         return;
       case "bookmarks":
         router.navigate("/(tabs)/bookmarks");
-        close();
+        announceAndListen("Opening Bookmarks.");
         return;
       case "profile":
         router.navigate("/profile");
-        close();
+        announceAndListen("Opening Profile.");
         return;
       case "speed":
         updatePreferences({ speed: intent.value });
-        setMessage(`Reading speed set to ${intent.value} times.`);
+        announceAndListen(`Reading speed set to ${intent.value} times.`);
         break;
       case "faster":
       case "slower": {
@@ -114,141 +241,177 @@ export function FloatingVoiceCommand() {
         const nextIndex = Math.max(0, Math.min(READING_SPEEDS.length - 1, currentIndex + (intent.type === "faster" ? 1 : -1)));
         const speed = READING_SPEEDS[nextIndex];
         updatePreferences({ speed });
-        setMessage(`Reading speed set to ${speed} times.`);
+        announceAndListen(`Reading speed set to ${speed} times.`);
         break;
       }
+      case "help":
+        speakHelp();
+        break;
       default:
         break;
     }
     setCommand("");
-  };
+  }, [announceAndListen, bible.isLoading, bible.verseText, clearTimers, moveChapter, preferences, reference, setReference, speakHelp, toggleBookmark, updatePreferences]);
 
   useSpeechRecognitionEvent("start", () => {
     setListening(true);
-    setMessage("Listening. Say one command, then pause.");
+    const status = "Listening now. You have one minute. Take your time and pause when you need to.";
+    setMessage(status);
+    AccessibilityInfo.announceForAccessibility(status);
   });
-  useSpeechRecognitionEvent("end", () => setListening(false));
+  useSpeechRecognitionEvent("end", () => {
+    setListening(false);
+    if (!shouldResumeAfterPause(sessionDeadline.current, Date.now(), receivedFinalResult.current)) return;
+    setMessage("Still here. Take your time; listening is continuing.");
+    if (restartTimer.current) clearTimeout(restartTimer.current);
+    restartTimer.current = setTimeout(() => {
+      restartTimer.current = null;
+      if (shouldResumeAfterPause(sessionDeadline.current, Date.now(), receivedFinalResult.current)) void startRecognizer();
+    }, RESTART_AFTER_SILENCE_MS);
+  });
   useSpeechRecognitionEvent("result", (event) => {
     const heard = event.results[0]?.transcript?.trim();
     if (!heard) return;
     setTranscript(heard);
-    setCommand(heard);
-    if (event.isFinal) runCommand(heard);
+    if (event.isFinal) {
+      receivedFinalResult.current = true;
+      sessionDeadline.current = 0;
+      clearTimers();
+      runCommand(heard);
+    }
   });
   useSpeechRecognitionEvent("error", (event) => {
     setListening(false);
+    const retryable = event.error === "no-speech" || event.error === "speech-timeout";
+    if (!retryable) {
+      sessionDeadline.current = 0;
+      clearTimers();
+    }
     const detail = event.error === "not-allowed"
-      ? "Microphone or speech access was denied. Enable it in your device or browser settings."
+      ? "Microphone or speech access was denied. Enable it in device or browser settings, or type a command."
       : event.error === "language-not-supported"
-        ? "This device does not support speech recognition in the selected language. You can type the command instead."
-        : event.error === "no-speech" || event.error === "speech-timeout"
-          ? "I did not hear a command. Try again or type it below."
-          : "Speech recognition is unavailable right now. You can type the command below.";
+        ? "This device does not support speech recognition in the selected language. You can type a command instead."
+        : retryable
+          ? "No words yet. Take your time; I will keep listening."
+          : "Speech recognition is unavailable right now. You can type a command or try again.";
     setMessage(detail);
+    if (!retryable) {
+      recognitionAllowed.current = false;
+      setTyping(true);
+      AccessibilityInfo.announceForAccessibility(detail);
+    }
   });
 
-  const startListening = async () => {
-    setMessage("");
-    setTranscript("");
-    if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
-      setMessage("Speech recognition is not available in this browser or build. Type your command below.");
+  useEffect(() => {
+    if (voiceControllerActive) {
+      void beginVoiceWindow();
       return;
     }
-    try {
-      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!permission.granted) {
-        setMessage("Microphone and speech-recognition permission are needed. You can still type commands below.");
-        return;
-      }
-      ExpoSpeechRecognitionModule.start({
-        lang: preferences.language === "Hausa" ? "ha-NG" : "en-US",
-        interimResults: true,
-        continuous: false,
-        maxAlternatives: 1,
-        contextualStrings: ["Genesis", "Exodus", "Psalms", "Matthew", "John", "Romans", "Revelation", "chapter", "verse", "bookmark"],
-      });
-    } catch {
-      setListening(false);
-      setMessage("Could not start speech recognition. Type your command below instead.");
+    sessionDeadline.current = 0;
+    clearTimers();
+    ExpoSpeechRecognitionModule.abort();
+    setListening(false);
+    return () => {
+      sessionDeadline.current = 0;
+      clearTimers();
+      ExpoSpeechRecognitionModule.abort();
+    };
+  }, [beginVoiceWindow, clearTimers, voiceControllerActive]);
+
+  const stopListening = () => {
+    if (!listening) {
+      void beginVoiceWindow();
+      return;
     }
+    sessionDeadline.current = 0;
+    clearTimers();
+    ExpoSpeechRecognitionModule.stop();
+    const status = "Listening stopped. I will process any final words. If there is no command, tap Listen again or use the keyboard.";
+    setMessage(status);
+    AccessibilityInfo.announceForAccessibility(status);
+  };
+
+  const showTyping = () => {
+    sessionDeadline.current = 0;
+    clearTimers();
+    ExpoSpeechRecognitionModule.abort();
+    recognitionAllowed.current = false;
+    setListening(false);
+    setMessage("Listening stopped. Use Listen again or type a command.");
+    setTyping((visible) => !visible);
+  };
+
+  const submitTypedCommand = () => {
+    if (!command.trim()) {
+      setMessage("Type a short command or tap Listen again to speak.");
+      return;
+    }
+    runCommand(command);
   };
 
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Voice command"
-        accessibilityHint="Opens spoken Bible commands when your device or browser supports speech recognition, with a typed command option."
-        accessibilityState={{ expanded: visible }}
-        onPress={() => { setMessage(""); setVisible(true); }}
-        style={({ pressed }) => [styles.fab, pathname === "/onboarding" && styles.onboardingFab, (pathname === "/navigate" || pathname === "/bookmarks") && styles.greenFab, pathname.includes("settings") && styles.settingsFab, pressed && styles.pressed, { right: horizontalOffset, bottom: pathname === "/onboarding" ? 200 + insets.bottom : 92 + insets.bottom }]}
-      >
-        <Ionicons name="mic" size={26} color={pathname === "/onboarding" || pathname.includes("settings") ? colors.tealInk : colors.amberInk} />
-      </Pressable>
-
-      <Modal visible={visible} transparent animationType="fade" onRequestClose={close} statusBarTranslucent>
-        <KeyboardAvoidingView style={styles.modalRoot} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close voice command" style={styles.scrim} onPress={close} />
-          <View accessibilityViewIsModal style={styles.sheet}>
-            <View style={styles.sheetHeader}>
-              <View style={styles.sheetTitleWrap}>
-                <View style={styles.sheetIcon}><Ionicons name="mic" size={20} color={colors.tealBright} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text accessibilityRole="header" style={styles.sheetTitle}>Voice command</Text>
-                  <Text style={styles.sheetSubtitle}>Current passage: {formatReference(reference)}</Text>
-                </View>
-              </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Close voice command" onPress={close} style={styles.closeButton}>
-                <Ionicons name="close" size={23} color={colors.text} />
-              </Pressable>
+      {!voiceControllerActive ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Start voice controller and listen for a command"
+          accessibilityHint="Starts listening immediately. Say a Bible reference or command. Say Help for spoken examples."
+          onPress={() => setVoiceControllerActive(true)}
+          style={({ pressed }) => [styles.fab, pathname === "/onboarding" && styles.onboardingFab, (pathname === "/navigate" || pathname === "/bookmarks") && styles.greenFab, pathname.includes("settings") && styles.settingsFab, pressed && styles.pressed, { right: horizontalOffset, bottom: pathname === "/onboarding" ? 200 + insets.bottom : 92 + insets.bottom }]}
+        >
+          <Ionicons name="mic" size={26} color={pathname === "/onboarding" || pathname.includes("settings") ? colors.tealInk : colors.amberInk} />
+        </Pressable>
+      ) : (
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={[styles.controller, { left: horizontalOffset, right: horizontalOffset, bottom: 82 + insets.bottom }]}>
+          <View style={styles.controllerHeader}>
+            <View style={styles.statusRow}>
+              <View style={[styles.statusDot, listening && styles.statusDotLive]} />
+              <Text accessibilityRole="header" style={styles.controllerTitle}>Voice controller</Text>
             </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close voice controller and stop listening" onPress={closeController} style={styles.closeButton}>
+              <Ionicons name="close" size={22} color={colors.text} />
+            </Pressable>
+          </View>
 
-            <View style={styles.statusBox}>
-              <Ionicons name="information-circle-outline" size={19} color={colors.amber} />
-              <Text style={styles.statusText}>Speak one command or type it below. A secure browser/device speech service is required for recognition.</Text>
-            </View>
+          <Text accessibilityLiveRegion="polite" accessibilityRole="text" style={styles.message}>
+            {message || (listening ? "Listening. Take your time." : "Ready for your next command.")}
+          </Text>
+          <Text style={styles.timeHint}>{listening ? "Listening for up to one minute. Pauses are okay." : recognitionAllowed.current ? "Listening is paused. Use Listen again or the keyboard." : "Microphone is not active. Retry listening or use the keyboard."}</Text>
+          {transcript ? <Text accessibilityLiveRegion="polite" style={styles.transcript}>I heard: {transcript}</Text> : null}
 
+          {typing ? (
             <View style={styles.inputRow}>
               <TextInput
                 value={command}
                 onChangeText={setCommand}
-                onSubmitEditing={() => runCommand()}
+                onSubmitEditing={submitTypedCommand}
                 returnKeyType="go"
-                accessibilityLabel="Voice command text"
-                accessibilityHint="For example, Open Romans 6:2, Next verse, or Bookmark this verse"
-                placeholder="Try: Open Romans 6:2"
+                accessibilityLabel="Type a voice command"
+                accessibilityHint="For example, Open Romans 6, Next verse, or say Help"
+                placeholder="Type a command"
                 placeholderTextColor="#898581"
                 style={styles.input}
               />
-              <Pressable accessibilityRole="button" accessibilityLabel="Run voice command" onPress={() => runCommand()} style={styles.runButton}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Run typed command" onPress={submitTypedCommand} style={styles.runButton}>
                 <Ionicons name="arrow-forward" size={22} color={colors.tealInk} />
               </Pressable>
             </View>
+          ) : null}
 
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={listening ? "Stop listening" : "Speak a command"}
-              accessibilityHint={listening ? "Ends speech recognition and processes the command heard" : "Requests microphone permission and listens for one Bible command"}
-              accessibilityState={{ selected: listening }}
-              onPress={() => listening ? ExpoSpeechRecognitionModule.stop() : void startListening()}
-              style={[styles.listenButton, listening && styles.listenButtonActive]}
-            >
-              <Ionicons name={listening ? "stop-circle-outline" : "mic-outline"} size={22} color={colors.tealInk} />
-              <Text style={styles.listenButtonText}>{listening ? "Listening… Tap to stop" : "Speak a command"}</Text>
+          <View style={styles.controlsRow}>
+            <Pressable accessibilityRole="button" accessibilityLabel={listening ? "Stop listening and finish this command" : "Listen again for a command"} accessibilityHint={listening ? "Stops listening and processes the words heard" : "Starts another listening period"} accessibilityState={{ selected: listening }} onPress={stopListening} style={[styles.listenButton, listening && styles.listenButtonActive]}>
+              <Ionicons name={listening ? "stop-circle-outline" : "mic-outline"} size={21} color={listening ? colors.amberInk : colors.tealInk} />
+              <Text style={[styles.listenButtonText, listening && styles.listenButtonTextActive]}>{listening ? "Finish listening" : "Listen again"}</Text>
             </Pressable>
-            {transcript ? <Text accessibilityLiveRegion="polite" style={styles.transcript}>Heard: {transcript}</Text> : null}
-
-            <View style={styles.shortcutRow}>
-              <Pressable accessibilityRole="button" onPress={() => { setCommand("Open Romans 6"); }} style={styles.shortcut}><Text style={styles.shortcutText}>Romans 6</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => { setCommand("Next verse"); }} style={styles.shortcut}><Text style={styles.shortcutText}>Next verse</Text></Pressable>
-              <Pressable accessibilityRole="button" onPress={() => { setCommand(speaking ? "Pause" : "Read"); }} style={styles.shortcut}><Text style={styles.shortcutText}>{speaking ? "Pause" : "Read"}</Text></Pressable>
-            </View>
-
-            {message ? <Text accessibilityRole="alert" style={styles.message}>{message}</Text> : null}
-            <Text style={styles.example}>Your device/browser’s recognition service processes speech; its internet and privacy behavior depends on that service. The app does not send recordings to our backend. If recognition is unavailable, type commands below. Also try “Previous chapter”, “Repeat”, “Bookmark this verse”, or “Change speed to 1.25”.</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Hear voice command examples" accessibilityHint="Speaks examples, then resumes listening" onPress={speakHelp} style={styles.helpButton}>
+              <Ionicons name="help-circle-outline" size={22} color={colors.amber} />
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={typing ? "Hide typing field" : "Type a command instead"} accessibilityHint="Shows a text field as an alternative to speaking" onPress={showTyping} style={styles.helpButton}>
+              <Ionicons name="keypad-outline" size={21} color={colors.text} />
+            </Pressable>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      )}
     </>
   );
 }
@@ -259,27 +422,23 @@ const styles = StyleSheet.create({
   greenFab: { backgroundColor: colors.teal },
   settingsFab: { backgroundColor: colors.amber },
   pressed: { opacity: 0.82, transform: [{ scale: 0.97 }] },
-  modalRoot: { flex: 1, justifyContent: "flex-end", padding: 16 },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.72)" },
-  sheet: { width: "100%", maxWidth: 390, alignSelf: "center", padding: 18, borderRadius: 20, borderWidth: 1, borderColor: "#6b5126", backgroundColor: colors.surface, marginBottom: Platform.OS === "web" ? 72 : 8, shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.35, shadowRadius: 16, elevation: 12 },
-  sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  sheetTitleWrap: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
-  sheetIcon: { width: 44, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#10211b" },
-  sheetTitle: { color: colors.text, fontSize: 20, lineHeight: 26, fontWeight: "800" },
-  sheetSubtitle: { color: colors.amberSoft, fontSize: 13, lineHeight: 19 },
-  closeButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 12, borderWidth: 1, borderColor: colors.border },
-  statusBox: { flexDirection: "row", alignItems: "flex-start", gap: 9, padding: 12, marginBottom: 13, borderRadius: 10, borderWidth: 1, borderColor: "#775820", backgroundColor: "#21190d" },
-  statusText: { flex: 1, color: "#ead6b5", fontSize: 13, lineHeight: 19 },
-  inputRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  input: { flex: 1, minHeight: 54, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, color: colors.text, fontSize: 16 },
-  runButton: { width: 56, height: 54, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.tealBright },
-  listenButton: { minHeight: 54, marginTop: 12, borderRadius: 11, backgroundColor: colors.tealBright, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9 },
+  controller: { position: "absolute", zIndex: 30, maxWidth: 354, padding: 14, borderRadius: 16, borderWidth: 2, borderColor: colors.tealBright, backgroundColor: "#151918", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.45, shadowRadius: 12, elevation: 14 },
+  controllerHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 5 },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 9 },
+  statusDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.amber },
+  statusDotLive: { backgroundColor: colors.tealBright },
+  controllerTitle: { color: colors.amber, fontSize: 18, lineHeight: 24, fontWeight: "800" },
+  closeButton: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: colors.border },
+  message: { color: colors.text, fontSize: 15, lineHeight: 21, marginTop: 2 },
+  timeHint: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  transcript: { color: colors.amberSoft, fontSize: 14, lineHeight: 19, marginTop: 5 },
+  inputRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 9 },
+  input: { flex: 1, minHeight: 48, paddingHorizontal: 12, borderRadius: 9, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, color: colors.text, fontSize: 16 },
+  runButton: { width: 48, height: 48, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: colors.tealBright },
+  controlsRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 10 },
+  listenButton: { flex: 1, minHeight: 50, borderRadius: 10, backgroundColor: colors.tealBright, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   listenButtonActive: { backgroundColor: colors.amberSoft },
-  listenButtonText: { color: colors.tealInk, fontSize: 16, fontWeight: "800" },
-  transcript: { color: colors.text, fontSize: 14, lineHeight: 20, marginTop: 8 },
-  shortcutRow: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginTop: 11 },
-  shortcut: { minHeight: 42, paddingHorizontal: 12, justifyContent: "center", borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceRaised },
-  shortcutText: { color: colors.text, fontSize: 13, fontWeight: "600" },
-  message: { color: colors.tealBright, fontSize: 14, lineHeight: 20, marginTop: 11 },
-  example: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 11 },
+  listenButtonText: { color: colors.tealInk, fontSize: 15, fontWeight: "800" },
+  listenButtonTextActive: { color: colors.amberInk },
+  helpButton: { width: 48, height: 48, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border },
 });
