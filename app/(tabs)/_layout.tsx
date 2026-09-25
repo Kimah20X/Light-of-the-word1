@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Tabs, usePathname } from "expo-router";
+import { Tabs } from "expo-router";
 import { Platform, StyleSheet, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HapticTab } from "@/components/haptic-tab";
@@ -14,7 +14,6 @@ const ICONS = {
 
 export default function TabLayout() {
   const insets = useSafeAreaInsets();
-  const pathname = usePathname();
   const bottomPadding = Platform.OS === "web" ? 8 : Math.max(insets.bottom, 8);
   const tabBarHeight = 72 + bottomPadding;
 
@@ -22,7 +21,6 @@ export default function TabLayout() {
     <Tabs
       screenOptions={({ route }) => {
         const routeName = route.name === "index" ? "Home" : route.name === "navigate" ? "Navigate" : route.name === "bookmarks" ? "Bookmarks" : "Settings";
-        const focused = route.name === "index" ? pathname === "/" : pathname.toLowerCase().includes(route.name.toLowerCase());
         return ({
         headerShown: false,
         tabBarButton: (props) => <HapticTab {...props} routeName={route.name} />,

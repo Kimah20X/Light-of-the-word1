@@ -4,6 +4,7 @@ import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { registerAccountAuthRoutes } from "./account-routes";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -27,6 +28,24 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+function isAllowedAppOrigin(origin: string, requestHost: string) {
+  try {
+    const parsed = new URL(origin);
+    const host = parsed.hostname.toLowerCase();
+    const currentHost = requestHost.toLowerCase();
+    const configuredOrigins = (process.env.APP_ORIGIN ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+    if (configuredOrigins.some((candidate) => candidate === origin)) return true;
+    if (host === currentHost) return true;
+    if (["localhost", "127.0.0.1", "::1"].includes(host) && ["localhost", "127.0.0.1", "::1"].includes(currentHost)) return true;
+    // Managed preview app/API hosts use different numeric port prefixes but share a project identifier.
+    const appProject = host.match(/^\d+-(.+)$/)?.[1];
+    const apiProject = currentHost.match(/^\d+-(.+)$/)?.[1];
+    return Boolean(appProject && apiProject && appProject === apiProject);
+  } catch {
+    return false;
+  }
+}
+
 async function startServer() {
   const app = express();
   const server = createServer(app);
@@ -34,16 +53,19 @@ async function startServer() {
   // Enable CORS for all routes - reflect the request origin to support credentials
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin) {
+    if (origin && isAllowedAppOrigin(origin, req.hostname)) {
       res.header("Access-Control-Allow-Origin", origin);
+      res.header("Vary", "Origin");
+      res.header("Access-Control-Allow-Credentials", "true");
+    } else if (origin) {
+      res.sendStatus(403);
+      return;
     }
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
     res.header(
       "Access-Control-Allow-Headers",
       "Origin, X-Requested-With, Content-Type, Accept, Authorization",
     );
-    res.header("Access-Control-Allow-Credentials", "true");
-
     // Handle preflight requests
     if (req.method === "OPTIONS") {
       res.sendStatus(200);
@@ -57,6 +79,7 @@ async function startServer() {
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  registerAccountAuthRoutes(app);
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, timestamp: Date.now() });

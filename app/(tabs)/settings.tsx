@@ -4,6 +4,7 @@ import React from "react";
 import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { colors, Screen } from "@/components/light-ui";
 import { useAppState } from "@/lib/app-state";
+import { useAuth } from "@/hooks/use-auth";
 
 const LANGUAGES = ["English", "Hausa", "Yoruba", "Igbo"] as const;
 const SPEEDS = [0.75, 1, 1.25, 1.5] as const;
@@ -30,6 +31,7 @@ function PreferenceRow({ title, detail, value, icon, onValueChange, disabled = f
 
 export default function SettingsScreen() {
   const { preferences, updatePreferences, setOnboardingComplete } = useAppState();
+  const { user, isAuthenticated, loading } = useAuth();
   return (
     <Screen>
       <View style={styles.page}>
@@ -38,8 +40,8 @@ export default function SettingsScreen() {
           <Pressable accessibilityRole="button" accessibilityLabel="Sign in and account profile" accessibilityHint="Opens profile, login, and account options" onPress={() => router.push("/profile")} style={styles.accountRow}>
             <Ionicons name="person-circle-outline" size={22} color={colors.tealBright} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.accountTitle}>Sign In</Text>
-              <Text style={styles.preferenceDetail}>Sync your bookmarks & progress</Text>
+              <Text style={styles.accountTitle}>{loading ? "Checking account…" : isAuthenticated ? user?.name || "Account" : "Sign In"}</Text>
+              <Text style={styles.preferenceDetail}>{loading ? "Checking your sign-in status" : isAuthenticated ? user?.email || "Signed in · reading stays local" : "Sign in or create an account"}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>

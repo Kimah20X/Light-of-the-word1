@@ -5,21 +5,33 @@ import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native
 import { Card, colors, IconButton, PrimaryButton, Screen, SectionTitle } from "@/components/light-ui";
 import { formatReference, useAppState } from "@/lib/app-state";
 import { getBook } from "@/lib/bible-catalog";
-
-const VERSES: Record<string, string> = {
-  "Romans 6:2": "God forbid. How shall we, that are dead to sin, live any longer therein?",
-  "John 3:16": "For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.",
-  "Psalms 23:1": "The LORD is my shepherd; I shall not want.",
-};
+import { getPreviewVerseText } from "@/lib/preview-verses";
+import { useBibleChapter } from "@/lib/use-bible-chapter";
+import { ApiBibleFumsReporter } from "@/components/api-bible-fums";
 
 export default function ReaderScreen() {
   const { reference, setReference, toggleBookmark, isBookmarked, preferences, updatePreferences, setVoiceCommandOpen } = useAppState();
   const [speaking, setSpeaking] = useState(false);
   const key = formatReference(reference);
-  const verseText = VERSES[key] ?? "";
+  const bible = useBibleChapter();
+  const sampleText = getPreviewVerseText(reference);
+  const useExplicitPreviewSample = bible.providerReady && !bible.providerConfigured && !bible.hasProviderIdentity;
+  const verseText = bible.verseText || (useExplicitPreviewSample ? sampleText : "");
   const book = getBook(reference.book);
-  const displayVerse = verseText || "This verse text is not bundled in this frontend preview. The full offline KJV data file needs to be connected to display this reference.";
+  const displayVerse = verseText || (bible.isLoading
+    ? "Loading this chapter…"
+    : bible.providerConfigured
+      ? bible.fetchError?.message ?? "This verse is not available in the configured translation."
+      : bible.hasProviderIdentity
+        ? "This saved chapter is outside its 30-day cache period; connect to refresh it."
+        : "Add the API.Bible project secrets to load the full KJV. Any sample text shown here is preview-only.");
   const progressWidth = `${Math.min(100, Math.round((reference.chapter / (book?.chapters ?? reference.chapter)) * 100))}%` as `${number}%`;
+
+  const offlineStatus = !bible.providerReady
+    ? bible.hasProviderIdentity ? "Provider unavailable · saved chapters are local" : "Checking Bible provider"
+    : bible.isOfflineCached
+    ? bible.isCacheStale ? "Cached on this device · refresh required" : "Chapter saved on this device"
+    : bible.providerConfigured ? "API.Bible · fetched chapters save here" : "Bible provider setup needed";
 
   const speak = () => {
     if (!verseText) {
@@ -62,7 +74,8 @@ export default function ReaderScreen() {
   const changeVerse = (delta: number) => setReference({ ...reference, verse: Math.max(1, reference.verse + delta) });
 
   return (
-    <Screen compactHeader offlineStatus={`Offline · ${preferences.language === "Hausa" ? "Hausa" : "English"} KJV preview`}>
+    <Screen compactHeader offlineStatus={offlineStatus}>
+      <ApiBibleFumsReporter token={bible.fumsToken} viewKey={key} />
       <View style={styles.chapterHeader}>
         <Text accessibilityRole="header" style={styles.chapterTitle}>{reference.book} {reference.chapter}</Text>
         <View style={styles.progressTrack} accessibilityLabel={`Chapter ${reference.chapter} of ${book?.chapters ?? reference.chapter}`}>
@@ -78,8 +91,16 @@ export default function ReaderScreen() {
           </Pressable>
         </View>
         <Text accessibilityLabel={`${key}. ${displayVerse}`} style={[styles.verseText, { fontSize: preferences.fontSize, lineHeight: preferences.fontSize * 1.48 }]}>{displayVerse}</Text>
-        {!verseText ? <Text style={styles.missingDataNote}>No text is fabricated or fetched from a service in this preview.</Text> : null}
+        {!verseText ? <Text style={styles.missingDataNote}>{bible.isCacheStale ? "This saved chapter is older than 30 days and must be refreshed before display." : bible.fetchError && bible.isOfflineCached ? "Showing the saved chapter because the service is unavailable." : "Only API.Bible passages or the explicitly marked local preview sample are displayed."}</Text> : null}
+        {bible.chapter?.copyright ? <Text style={styles.copyright}>{bible.chapter.copyright}</Text> : null}
       </Card>
+
+      {bible.providerConfigured && bible.fetchError && !bible.isOfflineCached ? (
+        <Pressable accessibilityRole="button" accessibilityLabel="Retry loading this Bible chapter" onPress={() => bible.refresh()} style={styles.retryButton}>
+          <Ionicons name="refresh-outline" size={18} color={colors.tealBright} />
+          <Text style={styles.retryText}>Retry chapter</Text>
+        </Pressable>
+      ) : null}
 
       <View style={styles.playerRow}>
         <IconButton label="Previous verse" hint={`Previous verse before ${key}`} icon="play-skip-back-outline" onPress={() => changeVerse(-1)} />
@@ -125,6 +146,9 @@ const styles = StyleSheet.create({
   bookmarkAction: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   verseText: { color: colors.text, lineHeight: 34 },
   missingDataNote: { color: colors.amberSoft, fontSize: 13, lineHeight: 19, marginTop: 12 },
+  copyright: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 10 },
+  retryButton: { minHeight: 44, alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 8, marginTop: -12, marginBottom: 8 },
+  retryText: { color: colors.tealBright, fontSize: 14, fontWeight: "600" },
   playerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   mainPlayerButton: { width: 64, height: 64, borderRadius: 12, backgroundColor: "#c88124", borderWidth: 2, borderColor: colors.amber, alignItems: "center", justifyContent: "center" },
   pressed: { opacity: 0.72, transform: [{ scale: 0.97 }] },
