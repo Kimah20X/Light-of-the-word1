@@ -21,12 +21,17 @@ type AppStateValue = {
   preferences: AppPreferences;
   updatePreferences: (next: Partial<AppPreferences>) => void;
   hydrated: boolean;
+  onboardingComplete: boolean;
+  setOnboardingComplete: (complete: boolean) => void;
+  voiceCommandOpen: boolean;
+  setVoiceCommandOpen: (open: boolean) => void;
 };
 
 type PersistedState = {
   reference?: BibleReference;
   bookmarks?: Bookmark[];
   preferences?: Partial<AppPreferences>;
+  onboardingComplete?: boolean;
 };
 
 const STORAGE_KEY = "light-of-the-word.frontend.v1";
@@ -50,6 +55,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [preferences, setPreferences] = useState(DEFAULT_PREFERENCES);
   const [hydrated, setHydrated] = useState(false);
+  const [onboardingComplete, setOnboardingCompleteState] = useState(false);
+  const [voiceCommandOpen, setVoiceCommandOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -62,6 +69,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         }
         if (Array.isArray(saved.bookmarks)) setBookmarks(saved.bookmarks);
         if (saved.preferences) setPreferences((current) => ({ ...current, ...saved.preferences }));
+        if (typeof saved.onboardingComplete === "boolean") setOnboardingCompleteState(saved.onboardingComplete);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -74,9 +82,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    const value: PersistedState = { reference, bookmarks, preferences };
+    const value: PersistedState = { reference, bookmarks, preferences, onboardingComplete };
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(value)).catch(() => undefined);
-  }, [reference, bookmarks, preferences, hydrated]);
+  }, [reference, bookmarks, preferences, onboardingComplete, hydrated]);
 
   const setReference = useCallback((next: BibleReference) => setReferenceState(next), []);
   const toggleBookmark = useCallback(() => {
@@ -91,6 +99,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const updatePreferences = useCallback((next: Partial<AppPreferences>) => {
     setPreferences((current) => ({ ...current, ...next }));
   }, []);
+  const setOnboardingComplete = useCallback((complete: boolean) => {
+    setOnboardingCompleteState(complete);
+  }, []);
+  const setVoiceCommandOpenState = useCallback((open: boolean) => {
+    setVoiceCommandOpen(open);
+  }, []);
 
   const value = useMemo(() => ({
     reference,
@@ -102,7 +116,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     preferences,
     updatePreferences,
     hydrated,
-  }), [reference, setReference, bookmarks, toggleBookmark, removeBookmark, preferences, updatePreferences, hydrated]);
+    onboardingComplete,
+    setOnboardingComplete,
+    voiceCommandOpen,
+    setVoiceCommandOpen: setVoiceCommandOpenState,
+  }), [reference, setReference, bookmarks, toggleBookmark, removeBookmark, preferences, updatePreferences, hydrated, onboardingComplete, setOnboardingComplete, voiceCommandOpen, setVoiceCommandOpenState]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

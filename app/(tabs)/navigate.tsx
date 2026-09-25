@@ -2,20 +2,31 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { colors, PageTitle, PrimaryButton, Screen, SectionTitle } from "@/components/light-ui";
+import { colors, PrimaryButton, Screen, SectionTitle } from "@/components/light-ui";
 import { useAppState } from "@/lib/app-state";
 import { BIBLE_BOOKS, parseBibleReference, type BibleBook, type Testament } from "@/lib/bible-catalog";
 
+const TESTAMENTS: Testament[] = ["Old Testament", "New Testament"];
+
 export default function NavigateScreen() {
-  const { setReference, reference } = useAppState();
-  const [testament, setTestament] = useState<Testament>("Old Testament");
+  const { setReference, reference, setVoiceCommandOpen } = useAppState();
   const [search, setSearch] = useState("");
-  const [direct, setDirect] = useState("");
   const [selectedBook, setSelectedBook] = useState<BibleBook | null>(null);
   const [chapter, setChapter] = useState(1);
   const [verse, setVerse] = useState("1");
 
-  const books = useMemo(() => BIBLE_BOOKS.filter((book) => book.testament === testament && book.name.toLowerCase().includes(search.trim().toLowerCase())), [testament, search]);
+  const sections = useMemo(() => TESTAMENTS.map((testament) => ({
+    testament,
+    books: BIBLE_BOOKS.filter((book) => book.testament === testament && book.name.toLowerCase().includes(search.trim().toLowerCase())),
+  })), [search]);
+  const directReference = parseBibleReference(search);
+
+  const openDirect = () => {
+    if (!directReference) return false;
+    setReference(directReference);
+    router.navigate("/");
+    return true;
+  };
   const openSelected = () => {
     const verseNumber = Number.parseInt(verse, 10);
     if (!selectedBook || !Number.isInteger(chapter) || chapter < 1 || chapter > selectedBook.chapters || !Number.isInteger(verseNumber) || verseNumber < 1) {
@@ -25,89 +36,102 @@ export default function NavigateScreen() {
     setReference({ book: selectedBook.name, chapter, verse: verseNumber });
     router.navigate("/");
   };
-  const openDirect = () => {
-    const parsed = parseBibleReference(direct);
-    if (!parsed) {
-      Alert.alert("Reference not found", "Enter a book and chapter, such as Romans 6 or John 3:16.");
-      return;
-    }
-    setReference(parsed);
-    router.navigate("/");
-  };
   const chooseBook = (book: BibleBook) => {
     setSelectedBook(book);
-    setChapter(1);
-    setVerse("1");
+    setChapter(book.name === reference.book ? reference.chapter : 1);
+    setVerse(book.name === reference.book ? String(reference.verse) : "1");
   };
 
   return (
     <Screen noScroll>
       <View style={styles.page}>
-        <PageTitle title="Navigate" subtitle="Find a passage by book, chapter, and verse." />
-        <View style={styles.directRow}>
-          <TextInput value={direct} onChangeText={setDirect} onSubmitEditing={openDirect} returnKeyType="go" accessibilityLabel="Go to Bible reference" accessibilityHint="Enter a reference such as Romans 6:2" placeholder="Go to: Romans 6:2" placeholderTextColor="#898581" style={styles.searchInput} />
-          <Pressable accessibilityRole="button" accessibilityLabel="Open typed Bible reference" onPress={openDirect} style={styles.searchButton}>
-            <Ionicons name="arrow-forward" size={21} color={colors.tealInk} />
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={19} color={colors.muted} />
+          <TextInput
+            value={search}
+            onChangeText={setSearch}
+            onSubmitEditing={() => { if (!openDirect()) setSelectedBook(null); }}
+            returnKeyType="go"
+            accessibilityLabel="Search Bible books or open a reference"
+            accessibilityHint="Search books, or enter a direct reference such as John 3:16"
+            placeholder="Search for books or verses..."
+            placeholderTextColor="#d7c3b1"
+            style={styles.searchInput}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={directReference ? "Open typed Bible reference" : "Open voice command"}
+            accessibilityHint={directReference ? "Opens the Bible reader at this passage" : "Opens voice-style Bible commands"}
+            onPress={() => { if (!openDirect()) setVoiceCommandOpen(true); }}
+            style={styles.searchMic}
+          >
+            <Ionicons name={directReference ? "arrow-forward" : "mic"} size={22} color={colors.tealBright} />
           </Pressable>
         </View>
-        <View style={styles.searchRow}>
-          <Ionicons name="search-outline" size={19} color={colors.muted} />
-          <TextInput value={search} onChangeText={(value) => { setSearch(value); setSelectedBook(null); }} accessibilityLabel="Search Bible books" placeholder="Search books" placeholderTextColor="#898581" style={styles.searchField} />
-        </View>
-        <View style={styles.testamentRow} accessibilityRole="radiogroup" accessibilityLabel="Choose a Testament">
-          {(["Old Testament", "New Testament"] as Testament[]).map((value) => (
-            <Pressable key={value} accessibilityRole="radio" accessibilityLabel={value} accessibilityState={{ selected: testament === value }} onPress={() => { setTestament(value); setSelectedBook(null); }} style={[styles.testamentButton, testament === value && styles.testamentActive]}>
-              <Text style={[styles.testamentText, testament === value && styles.testamentTextActive]}>{value}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <Text style={styles.voiceHint}>Try saying “Open John chapter 3”</Text>
+
         {selectedBook ? (
-          <View style={styles.selectionArea}>
-            <View style={styles.selectedHeading}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.eyebrow}>{selectedBook.testament.toUpperCase()}</Text>
-                <Text accessibilityRole="header" style={styles.selectedTitle}>{selectedBook.name}</Text>
-              </View>
-              <Pressable accessibilityRole="button" accessibilityLabel="Back to book list" onPress={() => setSelectedBook(null)} style={styles.backButton}><Text style={styles.backText}>All books</Text></Pressable>
-            </View>
-            <SectionTitle>Choose a chapter</SectionTitle>
-            <FlatList
-              key="chapter-grid"
-              data={Array.from({ length: selectedBook.chapters }, (_, index) => index + 1)}
-              numColumns={6}
-              keyExtractor={(item) => `${selectedBook.name}-${item}`}
-              contentContainerStyle={styles.chapterGrid}
-              columnWrapperStyle={styles.gridRow}
-              renderItem={({ item }) => (
-                <Pressable accessibilityRole="radio" accessibilityLabel={`Chapter ${item}`} accessibilityState={{ selected: chapter === item }} onPress={() => setChapter(item)} style={[styles.chapterCell, chapter === item && styles.chapterSelected]}>
-                  <Text style={[styles.chapterText, chapter === item && styles.chapterTextSelected]}>{item}</Text>
+          <FlatList
+            key="chapter-grid"
+            data={Array.from({ length: selectedBook.chapters }, (_, index) => index + 1)}
+            numColumns={6}
+            keyExtractor={(item) => `${selectedBook.name}-${item}`}
+            contentContainerStyle={styles.chapterContent}
+            columnWrapperStyle={styles.chapterRow}
+            ListHeaderComponent={(
+              <View>
+                <View style={styles.verticalHeading}>
+                  <Text style={styles.eyebrow}>{selectedBook.testament.toUpperCase()}</Text>
+                  <Text accessibilityRole="header" style={styles.selectedTitle}>{selectedBook.name}</Text>
+                </View>
+                <Pressable accessibilityRole="button" accessibilityLabel="Back to all books" onPress={() => setSelectedBook(null)} style={styles.backButton}>
+                  <Ionicons name="chevron-back" size={17} color={colors.muted} /><Text style={styles.backText}>All books</Text>
                 </Pressable>
-              )}
-            />
-            <SectionTitle>Choose a verse</SectionTitle>
-            <TextInput value={verse} onChangeText={setVerse} keyboardType="number-pad" accessibilityLabel="Verse number" accessibilityHint="Enter a verse number" returnKeyType="done" style={styles.verseInput} />
-            <View style={styles.previewRef}><Text style={styles.previewLabel}>SELECTED PASSAGE</Text><Text style={styles.previewValue}>{selectedBook.name} {chapter}:{verse || "—"}</Text></View>
-            <PrimaryButton label="Open passage" icon="book-outline" onPress={openSelected} />
-          </View>
+                <SectionTitle>Choose a chapter</SectionTitle>
+              </View>
+            )}
+            ListFooterComponent={(
+              <View>
+                <SectionTitle>Choose a verse</SectionTitle>
+                <TextInput value={verse} onChangeText={setVerse} keyboardType="number-pad" accessibilityLabel="Verse number" accessibilityHint="Enter a verse number" returnKeyType="done" style={styles.verseInput} />
+                <View style={styles.previewRef}>
+                  <Text style={styles.previewLabel}>SELECTED PASSAGE</Text>
+                  <Text style={styles.previewValue}>{selectedBook.name} {chapter}:{verse || "—"}</Text>
+                </View>
+                <PrimaryButton label="Open passage" icon="book-outline" onPress={openSelected} />
+              </View>
+            )}
+            renderItem={({ item }) => (
+              <Pressable accessibilityRole="radio" accessibilityLabel={`Chapter ${item}`} accessibilityState={{ selected: chapter === item }} onPress={() => setChapter(item)} style={[styles.chapterCell, chapter === item && styles.chapterSelected]}>
+                <Text style={[styles.chapterText, chapter === item && styles.chapterTextSelected]}>{item}</Text>
+              </Pressable>
+            )}
+          />
         ) : (
           <FlatList
-            key={testament}
-            data={books}
-            numColumns={2}
-            keyExtractor={(item) => item.name}
-            columnWrapperStyle={styles.gridRow}
-            contentContainerStyle={styles.bookList}
-            ListHeaderComponent={<Text style={styles.listHeading}>{testament}</Text>}
-            ListEmptyComponent={<Text style={styles.empty}>No books match your search.</Text>}
-            renderItem={({ item }) => {
-              const selected = item.name === reference.book;
-              return (
-                <Pressable accessibilityRole="button" accessibilityLabel={`${item.name}, ${item.chapters} chapters`} accessibilityHint="Opens chapter selection" onPress={() => chooseBook(item)} style={({ pressed }) => [styles.bookCard, selected && styles.currentBook, pressed && { opacity: 0.75 }]}>
-                  <Text style={styles.bookName}>{item.name}</Text>
-                  <Text style={styles.chapterCount}>{item.chapters} chapters</Text>
-                </Pressable>
-              );
-            }}
+            key="testament-sections"
+            data={sections.filter((section) => section.books.length > 0)}
+            keyExtractor={(item) => item.testament}
+            contentContainerStyle={styles.sectionList}
+            ListEmptyComponent={<Text style={styles.empty}>No books match your search. Try a direct reference such as Romans 6:2.</Text>}
+            renderItem={({ item }) => (
+              <View style={styles.testamentSection}>
+                <View style={[styles.verticalHeading, item.testament === "New Testament" && styles.newTestamentBorder]}>
+                  <Text accessibilityRole="header" style={styles.testamentTitle}>{item.testament}</Text>
+                </View>
+                <View style={styles.bookGrid}>
+                  {item.books.map((book) => {
+                    const selected = book.name === reference.book;
+                    return (
+                      <Pressable key={book.name} accessibilityRole="button" accessibilityLabel={`${book.name}, ${book.chapters} chapters`} accessibilityHint="Opens chapter and verse selection" onPress={() => chooseBook(book)} style={({ pressed }) => [styles.bookCard, selected && styles.currentBook, pressed && styles.pressed]}>
+                        <Text style={styles.bookName}>{book.name}</Text>
+                        <Text style={styles.chapterCount}>{book.chapters} Chapters</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           />
         )}
       </View>
@@ -116,34 +140,31 @@ export default function NavigateScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, paddingHorizontal: 20, paddingTop: 18 },
-  directRow: { flexDirection: "row", gap: 10, marginBottom: 10 },
-  searchInput: { flex: 1, minHeight: 52, borderRadius: 10, paddingHorizontal: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 16 },
-  searchButton: { minWidth: 54, minHeight: 52, backgroundColor: colors.tealBright, borderRadius: 10, justifyContent: "center", alignItems: "center" },
-  searchRow: { height: 52, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, marginBottom: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
-  searchField: { flex: 1, color: colors.text, fontSize: 16, minHeight: 50 },
-  testamentRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
-  testamentButton: { flex: 1, minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: 9, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  testamentActive: { backgroundColor: "#261c0d", borderColor: colors.amber },
-  testamentText: { color: colors.muted, fontSize: 14, fontWeight: "600" },
-  testamentTextActive: { color: colors.amberSoft },
-  listHeading: { color: colors.amberSoft, fontSize: 19, fontWeight: "700", marginTop: 8, marginBottom: 12 },
-  bookList: { paddingBottom: 22 },
-  gridRow: { gap: 10, justifyContent: "space-between", marginBottom: 10 },
-  bookCard: { flex: 1, minHeight: 82, padding: 13, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, justifyContent: "center" },
-  currentBook: { borderColor: colors.amber, borderWidth: 1.5 },
-  bookName: { color: colors.text, fontSize: 16, fontWeight: "600", marginBottom: 6 },
-  chapterCount: { color: colors.amberSoft, fontSize: 12 },
-  empty: { color: colors.muted, fontSize: 15, paddingVertical: 18 },
-  selectionArea: { flex: 1 },
-  selectedHeading: { flexDirection: "row", alignItems: "center", marginBottom: 10, marginTop: 3 },
+  page: { flex: 1, paddingHorizontal: 24, paddingTop: 24 },
+  searchBar: { height: 56, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 16, paddingRight: 10, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border, borderRadius: 9 },
+  searchInput: { flex: 1, minHeight: 52, color: colors.text, fontSize: 16 },
+  searchMic: { width: 44, height: 46, alignItems: "center", justifyContent: "center" },
+  voiceHint: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 6, marginBottom: 18, paddingHorizontal: 4 },
+  sectionList: { paddingBottom: 130 },
+  testamentSection: { marginBottom: 24 },
+  verticalHeading: { minHeight: 38, justifyContent: "center", borderLeftWidth: 3, borderLeftColor: colors.amber, paddingLeft: 12, marginBottom: 15 },
+  newTestamentBorder: { borderLeftColor: colors.tealBright },
+  testamentTitle: { color: colors.text, fontSize: 28, lineHeight: 36, fontFamily: "serif", fontWeight: "600" },
+  bookGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  bookCard: { width: "48%", minHeight: 76, paddingVertical: 14, paddingHorizontal: 15, borderRadius: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, justifyContent: "center" },
+  currentBook: { borderColor: colors.amberStrong, borderWidth: 2, shadowColor: colors.amberStrong, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.3, shadowRadius: 8 },
+  bookName: { color: colors.text, fontSize: 16, fontFamily: "serif", fontWeight: "700", marginBottom: 4 },
+  chapterCount: { color: colors.amberStrong, fontSize: 12 },
+  pressed: { opacity: 0.7 },
+  empty: { color: colors.muted, fontSize: 14, lineHeight: 22, paddingVertical: 14 },
   eyebrow: { color: colors.tealBright, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
-  selectedTitle: { color: colors.amber, fontSize: 25, fontWeight: "700", marginTop: 3 },
-  backButton: { paddingVertical: 10, paddingHorizontal: 13, borderRadius: 8, backgroundColor: colors.surfaceRaised },
-  backText: { color: colors.text, fontSize: 14, fontWeight: "600" },
-  chapterGrid: { paddingBottom: 4 },
+  selectedTitle: { color: colors.amber, fontSize: 24, lineHeight: 32, fontWeight: "700", marginTop: 2 },
+  backButton: { minHeight: 42, flexDirection: "row", alignItems: "center", alignSelf: "flex-start", paddingHorizontal: 8 },
+  backText: { color: colors.muted, fontSize: 14 },
+  chapterContent: { paddingBottom: 130 },
+  chapterRow: { gap: 7, justifyContent: "space-between" },
   chapterCell: { flex: 1, height: 42, marginBottom: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  chapterSelected: { backgroundColor: colors.tealBright, borderColor: colors.tealBright },
+  chapterSelected: { backgroundColor: colors.teal, borderColor: colors.teal },
   chapterText: { color: colors.text, fontSize: 14, fontWeight: "600" },
   chapterTextSelected: { color: colors.tealInk },
   verseInput: { width: 130, minHeight: 50, backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 9, paddingHorizontal: 14, color: colors.text, fontSize: 17, marginBottom: 12 },

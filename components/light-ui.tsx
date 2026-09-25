@@ -3,16 +3,20 @@ import { router } from "expo-router";
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps, type ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { FigmaBrandMark } from "@/components/figma-brand-mark";
+import { useAppState } from "@/lib/app-state";
 
 export const colors = {
-  background: "#050505",
-  surface: "#1b1b1d",
-  surfaceRaised: "#222224",
+  background: "#000000",
+  surface: "#201f1f",
+  surfaceRaised: "#2a2a2a",
   border: "#353534",
-  text: "#f1efed",
-  muted: "#b7b2ae",
-  amber: "#f5aa24",
-  amberSoft: "#d7ad78",
+  text: "#e5e2e1",
+  muted: "#d7c3b1",
+  amber: "#ffb869",
+  amberStrong: "#ba7517",
+  amberInk: "#3f2300",
+  amberSoft: "#d7c3b1",
   teal: "#26a37a",
   tealBright: "#68dbae",
   tealInk: "#003121",
@@ -20,12 +24,13 @@ export const colors = {
   black: "#000000",
 };
 
-export function Screen({ children, noScroll = false, style }: { children: React.ReactNode; noScroll?: boolean; style?: ViewStyle }) {
+export function Screen({ children, noScroll = false, hideHeader = false, compactHeader = false, offlineStatus, style }: { children: React.ReactNode; noScroll?: boolean; hideHeader?: boolean; compactHeader?: boolean; offlineStatus?: string; style?: ViewStyle }) {
   return (
     <SafeAreaView edges={["top", "left", "right"]} style={[styles.safe, style]}>
-      <BrandHeader />
+      {offlineStatus ? <View style={styles.statusBar} accessibilityRole="text"><Ionicons name="cloud-offline-outline" size={16} color={colors.tealBright} /><Text style={styles.statusText}>{offlineStatus}</Text></View> : null}
+      {!hideHeader ? <BrandHeader compact={compactHeader} /> : null}
       {noScroll ? <View style={styles.content}>{children}</View> : (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scrollContent, compactHeader && styles.compactScrollContent]} showsVerticalScrollIndicator={false}>
           {children}
         </ScrollView>
       )}
@@ -33,20 +38,19 @@ export function Screen({ children, noScroll = false, style }: { children: React.
   );
 }
 
-export function BrandHeader({ back = false }: { back?: boolean }) {
+export function BrandHeader({ back = false, compact = false }: { back?: boolean; compact?: boolean }) {
+  const { preferences } = useAppState();
+  const languageCode = preferences.language === "English" ? "EN" : preferences.language.slice(0, 2).toUpperCase();
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, compact && styles.compactHeader]}>
       {back ? (
         <Pressable accessibilityRole="button" accessibilityLabel="Go back" onPress={() => router.back()} style={styles.headerAction}>
           <Ionicons name="arrow-back" size={23} color={colors.amberSoft} />
         </Pressable>
-      ) : <Ionicons name="book" size={21} color={colors.amber} accessibilityLabel="Bible" />}
+      ) : <FigmaBrandMark width={24} height={22} />}
       <Text style={styles.brand} accessibilityRole="header">Light of the Word</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel="Language preferences, English selected" accessibilityHint="Opens language options" onPress={() => router.push("/(tabs)/settings")} style={styles.languagePill}>
-        <Text style={styles.languagePillText}>EN</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel="Open profile" accessibilityHint="Opens your profile and account options" onPress={() => router.push("/profile")} style={styles.profileAction}>
-        <Ionicons name="person-circle-outline" size={27} color={colors.tealBright} />
+      <Pressable accessibilityRole="button" accessibilityLabel={`Language preferences, ${preferences.language} selected`} accessibilityHint="Opens language options" onPress={() => router.push("/(tabs)/settings")} style={styles.languagePill}>
+        <Text style={styles.languagePillText}>{languageCode}</Text>
       </Pressable>
     </View>
   );
@@ -65,11 +69,11 @@ export function Card({ children, style, highlighted = false }: { children: React
   return <View style={[styles.card, highlighted && styles.cardHighlighted, style]}>{children}</View>;
 }
 
-export function PrimaryButton({ label, onPress, icon, hint, disabled = false }: { label: string; onPress: () => void; icon?: keyof typeof Ionicons.glyphMap; hint?: string; disabled?: boolean }) {
+export function PrimaryButton({ label, onPress, icon, hint, disabled = false, tone = "teal" }: { label: string; onPress: () => void; icon?: keyof typeof Ionicons.glyphMap; hint?: string; disabled?: boolean; tone?: "teal" | "amber" }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, disabled && styles.disabled]}>
-      {icon ? <Ionicons name={icon} size={20} color={colors.tealInk} /> : null}
-      <Text style={styles.primaryButtonText}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={hint} accessibilityState={{ disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.primaryButton, tone === "amber" && styles.primaryButtonAmber, pressed && styles.pressed, disabled && styles.disabled]}>
+      {icon ? <Ionicons name={icon} size={20} color={tone === "amber" ? colors.amberInk : colors.tealInk} /> : null}
+      <Text style={[styles.primaryButtonText, tone === "amber" && styles.primaryButtonTextAmber]}>{label}</Text>
     </Pressable>
   );
 }
@@ -134,22 +138,27 @@ export function Notice({ children }: { children: string }) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  content: { flex: 1, paddingHorizontal: 20 },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 36, width: "100%", maxWidth: 640, alignSelf: "center" },
-  header: { height: 58, paddingHorizontal: 20, flexDirection: "row", alignItems: "center", gap: 12, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.background },
-  brand: { flex: 1, fontSize: 18, fontWeight: "700", color: colors.amberSoft, letterSpacing: 0.2 },
-  languagePill: { minWidth: 44, minHeight: 44, justifyContent: "center", alignItems: "center", borderColor: "#987035", borderWidth: 1, borderRadius: 8 },
-  languagePillText: { color: colors.amberSoft, fontSize: 13, fontWeight: "700" },
+  safe: { flex: 1, width: "100%", maxWidth: 390, alignSelf: "center", backgroundColor: colors.background },
+  content: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 120, width: "100%", maxWidth: 390, alignSelf: "center" },
+  compactScrollContent: { paddingTop: 0 },
+  statusBar: { height: 30, paddingHorizontal: 24, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#0e0e0e", borderBottomWidth: 1, borderBottomColor: colors.border },
+  statusText: { color: colors.text, fontSize: 13, lineHeight: 18 },
+  header: { height: 72, paddingHorizontal: 24, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: "#131313" },
+  compactHeader: { height: 54 },
+  brand: { flex: 1, fontSize: 20, fontWeight: "700", color: colors.amber, letterSpacing: 0.15 },
+  languagePill: { minWidth: 48, minHeight: 44, paddingHorizontal: 12, justifyContent: "center", alignItems: "center", borderColor: colors.amber, borderWidth: 1, borderRadius: 6 },
+  languagePillText: { color: colors.amber, fontSize: 13, fontWeight: "700" },
   headerAction: { width: 44, height: 44, justifyContent: "center" },
-  profileAction: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   titleBlock: { marginBottom: 22, gap: 7 },
-  pageTitle: { color: colors.text, fontSize: 28, lineHeight: 35, fontWeight: "700" },
+  pageTitle: { color: colors.text, fontSize: 32, lineHeight: 40, fontWeight: "600" },
   subtitle: { color: colors.muted, fontSize: 15, lineHeight: 22 },
-  card: { backgroundColor: colors.surface, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 17, marginBottom: 14 },
-  cardHighlighted: { borderColor: colors.amber, borderWidth: 1.5 },
+  card: { backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: 17, marginBottom: 14 },
+  cardHighlighted: { borderColor: colors.amber, borderWidth: 2 },
   primaryButton: { minHeight: 54, borderRadius: 10, backgroundColor: colors.tealBright, paddingHorizontal: 18, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
+  primaryButtonAmber: { minHeight: 72, backgroundColor: colors.amberStrong, borderRadius: 8, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 7, elevation: 4 },
   primaryButtonText: { color: colors.tealInk, fontSize: 16, fontWeight: "700" },
+  primaryButtonTextAmber: { color: colors.amberInk, textTransform: "uppercase", letterSpacing: 0.6 },
   secondaryButton: { minHeight: 50, paddingHorizontal: 16, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 9 },
   secondaryButtonText: { color: colors.text, fontSize: 15, fontWeight: "600" },
   iconButton: { minWidth: 48, minHeight: 48, backgroundColor: colors.surfaceRaised, borderRadius: 10, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.border },
