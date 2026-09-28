@@ -31,7 +31,7 @@ export default function SignupScreen() {
   return (
     <Screen>
       <PageTitle title="Create an account" subtitle="Sign up to create a LIGHT OF THE WORD account." />
-      {message ? <Notice>{message}</Notice> : <Notice>Passwords are hashed on the server. Your account requires MongoDB configuration to be available.</Notice>}
+      {message ? <Notice>{message}</Notice> : <Notice>Passwords are hashed on the server.</Notice>}
       <View style={styles.form}>
         <Field label="Your name" value={name} onChangeText={setName} placeholder="Name" autoComplete="name" textContentType="name" accessibilityHint="Enter your name" editable={!busy} />
         <Field label="Email address" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" accessibilityHint="Enter an email address" editable={!busy} />
