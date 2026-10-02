@@ -1,17 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Speech from "expo-speech";
-import React, { useState } from "react";
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect } from "react";
+import { AccessibilityInfo, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Card, colors, IconButton, Screen, SectionTitle } from "@/components/light-ui";
 import { formatReference, useAppState } from "@/lib/app-state";
 import { getBook } from "@/lib/bible-catalog";
 import { getPreviewVerseText } from "@/lib/preview-verses";
 import { useBibleChapter } from "@/lib/use-bible-chapter";
 import { ApiBibleFumsReporter } from "@/components/api-bible-fums";
+import { nextVerseReference } from "@/lib/voice-command";
 
 export default function ReaderScreen() {
-  const { reference, setReference, toggleBookmark, isBookmarked, preferences, updatePreferences } = useAppState();
-  const [speaking, setSpeaking] = useState(false);
+  const { reference, setReference, toggleBookmark, isBookmarked, preferences, updatePreferences, continuousReading, playbackSequence, startContinuousReading, stopContinuousReading, setVoiceControllerActive } = useAppState();
   const key = formatReference(reference);
   const bible = useBibleChapter();
   const sampleText = getPreviewVerseText(reference);
@@ -33,38 +33,74 @@ export default function ReaderScreen() {
     ? bible.isCacheStale ? "Cached on this device · refresh required" : "Chapter saved on this device"
     : bible.providerConfigured ? "API.Bible · fetched chapters save here" : "Bible provider setup needed";
 
-  const speak = () => {
-    if (!verseText) {
-      Alert.alert("Verse text unavailable", "This frontend preview includes only a few locally bundled verse samples. Connect the app’s offline KJV JSON data to read this reference.");
+  useEffect(() => {
+    if (!continuousReading) {
       return;
     }
+    let cancelled = false;
+    if (!verseText) {
+      if (bible.isLoading) return () => { cancelled = true; };
+      const unavailable = "This verse is not available to read aloud. Connect to the Bible service or open a cached chapter.";
+      stopContinuousReading();
+      setVoiceControllerActive(false);
+      AccessibilityInfo.announceForAccessibility(unavailable);
+      Speech.speak(unavailable, { language: preferences.language === "Hausa" ? "ha-NG" : "en-US" });
+      return () => { cancelled = true; };
+    }
+
     Speech.stop().then(() => {
-      setSpeaking(true);
+      if (cancelled) return;
       Speech.speak(`${key}. ${verseText}`, {
         rate: preferences.speed,
         language: preferences.language === "Hausa" ? "ha-NG" : "en-US",
-        onDone: () => setSpeaking(false),
-        onStopped: () => setSpeaking(false),
-        onError: () => setSpeaking(false),
+        volume: 1,
+        onDone: () => {
+          if (cancelled) return;
+          const next = nextVerseReference(reference, bible.verseCount);
+          if (next.moved) {
+            setReference(next.reference);
+            return;
+          }
+          stopContinuousReading();
+          setVoiceControllerActive(false);
+          const ending = next.reachedEnd
+            ? "You have reached the final verse of Revelation. Reading is complete."
+            : "The next verse is not available in this chapter. Reading has stopped.";
+          AccessibilityInfo.announceForAccessibility(ending);
+          Speech.speak(ending, { language: preferences.language === "Hausa" ? "ha-NG" : "en-US" });
+        },
+        onError: () => {
+          if (cancelled) return;
+          stopContinuousReading();
+          setVoiceControllerActive(false);
+          const error = "Text to speech stopped unexpectedly. Try playing this verse again.";
+          AccessibilityInfo.announceForAccessibility(error);
+        },
       });
     });
+    return () => {
+      cancelled = true;
+      void Speech.stop();
+    };
+  }, [bible.isLoading, bible.verseCount, continuousReading, key, playbackSequence, preferences.language, preferences.speed, reference, setReference, setVoiceControllerActive, stopContinuousReading, verseText]);
+
+  const togglePlayback = () => {
+    if (continuousReading) {
+      stopContinuousReading();
+      setVoiceControllerActive(false);
+      return;
+    }
+    if (!verseText && !bible.isLoading) {
+      Alert.alert("Verse text unavailable", "Connect to the Bible service or open a cached chapter before starting continuous reading.");
+      return;
+    }
+    startContinuousReading();
+    setVoiceControllerActive(true);
   };
 
-  const togglePlayback = async () => {
-    if (speaking) {
-      if (await Speech.isSpeakingAsync()) {
-        if (Platform.OS === "android") await Speech.stop();
-        else await Speech.pause();
-      }
-      setSpeaking(false);
-      return;
-    }
-    if (Platform.OS !== "android" && await Speech.isSpeakingAsync()) {
-      await Speech.resume();
-      setSpeaking(true);
-      return;
-    }
-    speak();
+  const repeatVerse = () => {
+    startContinuousReading();
+    setVoiceControllerActive(true);
   };
 
   const changeChapter = (delta: number) => {
@@ -104,8 +140,8 @@ export default function ReaderScreen() {
 
       <View style={styles.playerRow}>
         <IconButton label="Previous verse" hint={`Previous verse before ${key}`} icon="play-skip-back-outline" onPress={() => changeVerse(-1)} />
-        <Pressable accessibilityRole="button" accessibilityLabel={speaking ? "Pause reading" : "Read verse aloud"} accessibilityHint="Uses this device's text to speech" accessibilityState={{ selected: speaking }} onPress={togglePlayback} style={({ pressed }) => [styles.mainPlayerButton, pressed && styles.pressed]}>
-          <Ionicons name={speaking ? "pause" : "play"} size={27} color={colors.amberInk} />
+        <Pressable accessibilityRole="button" accessibilityLabel={continuousReading ? "Stop continuous Bible reading" : "Read from this verse and continue"} accessibilityHint={continuousReading ? "Stops Bible read-aloud and listening" : "Reads each verse aloud and continues into following chapters until you say Stop"} accessibilityState={{ selected: continuousReading }} onPress={togglePlayback} style={({ pressed }) => [styles.mainPlayerButton, pressed && styles.pressed]}>
+          <Ionicons name={continuousReading ? "stop" : "play"} size={27} color={colors.amberInk} />
         </Pressable>
         <IconButton label="Next verse" hint={`Next verse after ${key}`} icon="play-skip-forward-outline" onPress={() => changeVerse(1)} />
       </View>
@@ -114,7 +150,7 @@ export default function ReaderScreen() {
         <Pressable accessibilityRole="button" accessibilityLabel="Previous chapter" accessibilityHint="Moves to the previous chapter" onPress={() => changeChapter(-1)} style={styles.chapterButton}>
           <Ionicons name="play-back-outline" size={17} color={colors.text} /><Text style={styles.chapterButtonText}>Previous chapter</Text>
         </Pressable>
-        <IconButton label="Repeat current verse" hint="Reads this verse aloud again" icon="repeat" onPress={speak} />
+        <IconButton label="Repeat current verse and continue" hint="Starts reading from this verse and continues through the Bible until you say Stop" icon="repeat" onPress={repeatVerse} />
         <Pressable accessibilityRole="button" accessibilityLabel="Next chapter" accessibilityHint="Moves to the next chapter" onPress={() => changeChapter(1)} style={styles.chapterButton}>
           <Text style={styles.chapterButtonText}>Next chapter</Text><Ionicons name="play-forward-outline" size={17} color={colors.text} />
         </Pressable>

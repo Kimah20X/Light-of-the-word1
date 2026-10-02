@@ -5,16 +5,17 @@ import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-spe
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { colors } from "@/components/light-ui";
+import { BIBLE_BOOKS } from "@/lib/bible-catalog";
 import { formatReference, useAppState } from "@/lib/app-state";
 import { moveChapterReference, parseVoiceCommand, READING_SPEEDS, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "@/lib/voice-command";
 import { useBibleChapter } from "@/lib/use-bible-chapter";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const RESTART_AFTER_SILENCE_MS = 900;
-const VOICE_HELP = "Try: Open Bible; John three sixteen; next verse; next chapter; read, pause, repeat; save my place; open my bookmarks; faster, slower; or Settings. Say Help to hear this list again. I will listen for one minute, so take your time.";
+const VOICE_HELP = "Try: Open Bible; John three sixteen; next verse; next chapter; read continuously; say Stop to end; save my place; open my bookmarks; faster, slower; or Settings. Say Help to hear this list again. I will listen for one minute, so take your time.";
 
 export function FloatingVoiceCommand() {
-  const { reference, setReference, saveCurrentBookmark, preferences, updatePreferences, setOnboardingComplete, voiceControllerActive, setVoiceControllerActive } = useAppState();
+  const { reference, setReference, saveCurrentBookmark, preferences, updatePreferences, setOnboardingComplete, voiceControllerActive, setVoiceControllerActive, continuousReading, startContinuousReading, stopContinuousReading } = useAppState();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const viewport = useWindowDimensions();
@@ -27,6 +28,8 @@ export function FloatingVoiceCommand() {
   const [typing, setTyping] = useState(false);
   const bible = useBibleChapter();
   const sessionDeadline = useRef(0);
+  const continuousReadingRef = useRef(continuousReading);
+  continuousReadingRef.current = continuousReading;
   const receivedFinalResult = useRef(false);
   const permissionGranted = useRef(false);
   const recognitionAllowed = useRef(false);
@@ -44,12 +47,13 @@ export function FloatingVoiceCommand() {
     sessionDeadline.current = 0;
     clearTimers();
     ExpoSpeechRecognitionModule.abort();
+    stopContinuousReading();
     Speech.stop();
     recognitionAllowed.current = false;
     setListening(false);
     setTyping(false);
     setVoiceControllerActive(false);
-  }, [clearTimers, setVoiceControllerActive]);
+  }, [clearTimers, setVoiceControllerActive, stopContinuousReading]);
 
   const moveChapter = useCallback((delta: number) => {
     const result = moveChapterReference(reference, delta === -1 ? -1 : 1);
@@ -83,23 +87,29 @@ export function FloatingVoiceCommand() {
       }
       recognitionAllowed.current = true;
       receivedFinalResult.current = false;
-      Speech.stop();
+      if (!continuousReadingRef.current) Speech.stop();
       if (!sessionDeadline.current) {
-        sessionDeadline.current = Date.now() + VOICE_LISTENING_WINDOW_MS;
-        windowTimer.current = setTimeout(() => {
-          sessionDeadline.current = 0;
-          clearTimers();
-          ExpoSpeechRecognitionModule.abort();
-          setListening(false);
-          setMessage("Listening paused after one minute. Tap Listen again when you are ready.");
-        }, VOICE_LISTENING_WINDOW_MS);
+        if (continuousReadingRef.current) {
+          sessionDeadline.current = Number.MAX_SAFE_INTEGER;
+        } else {
+          sessionDeadline.current = Date.now() + VOICE_LISTENING_WINDOW_MS;
+          windowTimer.current = setTimeout(() => {
+            sessionDeadline.current = 0;
+            clearTimers();
+            ExpoSpeechRecognitionModule.abort();
+            setListening(false);
+            setMessage("Listening paused after one minute. Tap Listen again when you are ready.");
+          }, VOICE_LISTENING_WINDOW_MS);
+        }
       }
       ExpoSpeechRecognitionModule.start({
         lang: preferences.language === "Hausa" ? "ha-NG" : "en-US",
         interimResults: true,
-        continuous: false,
-        maxAlternatives: 1,
-        contextualStrings: ["Genesis", "Exodus", "Psalms", "Matthew", "John", "Romans", "Revelation", "chapter", "verse", "bookmark", "settings"],
+        continuous: continuousReadingRef.current,
+        iosTaskHint: "dictation",
+        maxAlternatives: 3,
+        contextualStrings: [...BIBLE_BOOKS.map((book) => book.name), "chapter", "verse", "next verse", "next chapter", "stop reading", "pause reading", "bookmark this verse", "save my place", "help", "settings", "bookmarks", "faster", "slower"],
+        androidIntentOptions: { EXTRA_LANGUAGE_MODEL: "free_form", EXTRA_ENABLE_BIASING_DEVICE_CONTEXT: true },
       });
     } catch {
       sessionDeadline.current = 0;
@@ -205,23 +215,27 @@ export function FloatingVoiceCommand() {
           announceAndListen(bible.isLoading ? "I am still loading this verse. Please wait a moment, then say Read again." : "This verse text is not available yet. Connect the KJV source or open a downloaded chapter, then say Read again.");
           break;
         }
+        startContinuousReading();
+        setVoiceControllerActive(true);
+        setMessage(`Reading ${formatReference(reference)} and continuing through each verse. Say Stop to end.`);
         clearTimers();
-        sessionDeadline.current = 0;
+        sessionDeadline.current = Number.MAX_SAFE_INTEGER;
+        receivedFinalResult.current = false;
         ExpoSpeechRecognitionModule.abort();
         setListening(false);
-        setMessage(`Reading ${formatReference(reference)}. I will listen again when the verse finishes.`);
-        Speech.stop();
-        Speech.speak(`${formatReference(reference)}. ${text}`, {
-          rate: preferences.speed,
-          language: preferences.language === "Hausa" ? "ha-NG" : "en-US",
-          onDone: () => announceAndListen(`Finished reading ${formatReference(reference)}.`),
-          onError: () => announceAndListen("Text to speech is unavailable on this device."),
-        });
+        restartTimer.current = setTimeout(() => {
+          restartTimer.current = null;
+          if (recognitionAllowed.current) void startRecognizer();
+        }, 250);
         break;
       }
       case "pause":
-        Speech.stop();
-        announceAndListen("Reading paused. Say Read or Resume when you want to continue.");
+        sessionDeadline.current = 0;
+        clearTimers();
+        ExpoSpeechRecognitionModule.abort();
+        setListening(false);
+        stopContinuousReading();
+        announceAndListen("Bible reading stopped. Say Read to continue from this verse.");
         break;
       case "bookmark":
         announceAndListen(saveCurrentBookmark()
@@ -264,13 +278,15 @@ export function FloatingVoiceCommand() {
         break;
     }
     setCommand("");
-  }, [announceAndListen, bible.isLoading, bible.verseCount, bible.verseText, clearTimers, moveChapter, preferences, reference, saveCurrentBookmark, setOnboardingComplete, setReference, speakHelp, updatePreferences]);
+  }, [announceAndListen, bible.isLoading, bible.verseCount, bible.verseText, clearTimers, moveChapter, preferences, reference, saveCurrentBookmark, setOnboardingComplete, setReference, setVoiceControllerActive, speakHelp, startContinuousReading, startRecognizer, stopContinuousReading, updatePreferences]);
 
   useSpeechRecognitionEvent("start", () => {
     setListening(true);
-    const status = "Listening now. You have one minute. Take your time and pause when you need to.";
+    const status = continuousReadingRef.current
+      ? "Listening for Stop while the Bible is read aloud. Say Stop to end."
+      : "Listening now. You have one minute. Take your time and pause when you need to.";
     setMessage(status);
-    AccessibilityInfo.announceForAccessibility(status);
+    if (!continuousReadingRef.current) AccessibilityInfo.announceForAccessibility(status);
   });
   useSpeechRecognitionEvent("end", () => {
     setListening(false);
@@ -286,6 +302,21 @@ export function FloatingVoiceCommand() {
     const heard = event.results[0]?.transcript?.trim();
     if (!heard) return;
     setTranscript(heard);
+    if (continuousReadingRef.current) {
+      const stopPattern = /^(?:please\s+)?(?:stop|stop reading|pause|pause reading|stop the bible|stop playback)[.!?\s]*$/i;
+      if (event.isFinal && event.results.some((result) => stopPattern.test(result.transcript.trim()))) {
+        receivedFinalResult.current = true;
+        sessionDeadline.current = 0;
+        clearTimers();
+        ExpoSpeechRecognitionModule.abort();
+        setListening(false);
+        stopContinuousReading();
+        announceAndListen("Bible reading stopped. Say Read to continue from this verse.");
+      } else if (event.isFinal) {
+        setMessage("Reading aloud. Say Stop at any time to end.");
+      }
+      return;
+    }
     if (event.isFinal) {
       receivedFinalResult.current = true;
       sessionDeadline.current = 0;
@@ -309,6 +340,7 @@ export function FloatingVoiceCommand() {
           : "Speech recognition is unavailable right now. You can type a command or try again.";
     setMessage(detail);
     if (!retryable) {
+      if (continuousReadingRef.current) stopContinuousReading();
       recognitionAllowed.current = false;
       setTyping(true);
       AccessibilityInfo.announceForAccessibility(detail);
@@ -332,6 +364,22 @@ export function FloatingVoiceCommand() {
   }, [beginVoiceWindow, clearTimers, voiceControllerActive]);
 
   const stopListening = () => {
+    if (continuousReading) {
+      stopContinuousReading();
+      Speech.stop();
+      sessionDeadline.current = 0;
+      clearTimers();
+      ExpoSpeechRecognitionModule.abort();
+      setListening(false);
+      const status = "Reading stopped. Listening for your next command.";
+      setMessage(status);
+      AccessibilityInfo.announceForAccessibility(status);
+      restartTimer.current = setTimeout(() => {
+        restartTimer.current = null;
+        if (voiceControllerActive) void beginVoiceWindow();
+      }, 250);
+      return;
+    }
     if (!listening) {
       void beginVoiceWindow();
       return;
@@ -379,7 +427,7 @@ export function FloatingVoiceCommand() {
           <View style={styles.controllerHeader}>
             <View style={styles.statusRow}>
               <View style={[styles.statusDot, listening && styles.statusDotLive]} />
-              <Text accessibilityRole="header" style={styles.controllerTitle}>Voice controller</Text>
+              <Text accessibilityRole="header" style={styles.controllerTitle}>{continuousReading ? "Bible reading · voice stop active" : "Voice controller"}</Text>
             </View>
             <Pressable accessibilityRole="button" accessibilityLabel="Close voice controller and stop listening" onPress={closeController} style={styles.closeButton}>
               <Ionicons name="close" size={22} color={colors.text} />
@@ -389,7 +437,7 @@ export function FloatingVoiceCommand() {
           <Text accessibilityLiveRegion="polite" accessibilityRole="text" style={styles.message}>
             {message || (listening ? "Listening. Take your time." : "Ready for your next command.")}
           </Text>
-          <Text style={styles.timeHint}>{listening ? "Listening for up to one minute. Pauses are okay." : recognitionAllowed.current ? "Listening is paused. Use Listen again or the keyboard." : "Microphone is not active. Retry listening or use the keyboard."}</Text>
+          <Text style={styles.timeHint}>{continuousReading ? "Reading and listening for ‘Stop’ until you stop it." : listening ? "Listening for up to one minute. Pauses are okay." : recognitionAllowed.current ? "Listening is paused. Use Listen again or the keyboard." : "Microphone is not active. Retry listening or use the keyboard."}</Text>
           {transcript ? <Text accessibilityLiveRegion="polite" style={styles.transcript}>I heard: {transcript}</Text> : null}
 
           {typing ? (
@@ -412,9 +460,9 @@ export function FloatingVoiceCommand() {
           ) : null}
 
           <View style={styles.controlsRow}>
-            <Pressable accessibilityRole="button" accessibilityLabel={listening ? "Stop listening and finish this command" : "Listen again for a command"} accessibilityHint={listening ? "Stops listening and processes the words heard" : "Starts another listening period"} accessibilityState={{ selected: listening }} onPress={stopListening} style={[styles.listenButton, listening && styles.listenButtonActive]}>
-              <Ionicons name={listening ? "stop-circle-outline" : "mic-outline"} size={21} color={listening ? colors.amberInk : colors.tealInk} />
-              <Text style={[styles.listenButtonText, listening && styles.listenButtonTextActive]}>{listening ? "Finish listening" : "Listen again"}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={continuousReading ? "Stop Bible reading" : listening ? "Stop listening and finish this command" : "Listen again for a command"} accessibilityHint={continuousReading ? "Stops spoken Bible reading; voice commands remain active" : listening ? "Stops listening and processes the words heard" : "Starts another listening period"} accessibilityState={{ selected: listening || continuousReading }} onPress={stopListening} style={[styles.listenButton, (listening || continuousReading) && styles.listenButtonActive]}>
+              <Ionicons name={listening || continuousReading ? "stop-circle-outline" : "mic-outline"} size={21} color={listening || continuousReading ? colors.amberInk : colors.tealInk} />
+              <Text style={[styles.listenButtonText, (listening || continuousReading) && styles.listenButtonTextActive]}>{continuousReading ? "Stop reading" : listening ? "Finish listening" : "Listen again"}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Hear voice command examples" accessibilityHint="Speaks examples, then resumes listening" onPress={speakHelp} style={styles.helpButton}>
               <Ionicons name="help-circle-outline" size={22} color={colors.amber} />

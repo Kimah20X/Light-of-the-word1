@@ -79,3 +79,16 @@ export function moveChapterReference(reference: BibleReference, delta: -1 | 1) {
   if (!nextBook || chapter < 1) return { reference, moved: false };
   return { reference: { book: nextBook.name, chapter, verse: 1 }, moved: true };
 }
+
+export function nextVerseReference(reference: BibleReference, verseCount: number) {
+  if (!Number.isInteger(verseCount) || verseCount < 1) {
+    return { reference, moved: false, reachedEnd: false };
+  }
+  if (reference.verse < verseCount) {
+    return { reference: { ...reference, verse: reference.verse + 1 }, moved: true, reachedEnd: false };
+  }
+  const nextChapter = moveChapterReference(reference, 1);
+  return nextChapter.moved
+    ? { reference: nextChapter.reference, moved: true, reachedEnd: false }
+    : { reference, moved: false, reachedEnd: true };
+}

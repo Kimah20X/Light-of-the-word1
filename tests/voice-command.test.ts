@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { moveChapterReference, parseVoiceCommand, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "../lib/voice-command";
+import { moveChapterReference, nextVerseReference, parseVoiceCommand, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "../lib/voice-command";
 
 describe("voice command parser", () => {
   it("opens a book, chapter, or verse reference", () => {
@@ -40,6 +40,8 @@ describe("voice command parser", () => {
     expect(parseVoiceCommand("Read")).toEqual({ type: "read" });
     expect(parseVoiceCommand("Resume")).toEqual({ type: "read" });
     expect(parseVoiceCommand("Pause")).toEqual({ type: "pause" });
+    expect(parseVoiceCommand("Stop")).toEqual({ type: "pause" });
+    expect(parseVoiceCommand("Stop reading")).toEqual({ type: "pause" });
     expect(parseVoiceCommand("Repeat this verse")).toEqual({ type: "repeat" });
     expect(parseVoiceCommand("Bookmark")).toEqual({ type: "bookmark" });
     expect(parseVoiceCommand("Bookmark this verse")).toEqual({ type: "bookmark" });
@@ -82,6 +84,24 @@ describe("voice command parser", () => {
     });
     expect(moveChapterReference({ book: "Revelation", chapter: 22, verse: 21 }, 1)).toEqual({
       reference: { book: "Revelation", chapter: 22, verse: 21 }, moved: false,
+    });
+  });
+
+  it("advances continuous reading across verses, chapters, books, and the end of the Bible", () => {
+    expect(nextVerseReference({ book: "John", chapter: 3, verse: 15 }, 36)).toEqual({
+      reference: { book: "John", chapter: 3, verse: 16 }, moved: true, reachedEnd: false,
+    });
+    expect(nextVerseReference({ book: "Genesis", chapter: 1, verse: 31 }, 31)).toEqual({
+      reference: { book: "Genesis", chapter: 2, verse: 1 }, moved: true, reachedEnd: false,
+    });
+    expect(nextVerseReference({ book: "Genesis", chapter: 50, verse: 26 }, 26)).toEqual({
+      reference: { book: "Exodus", chapter: 1, verse: 1 }, moved: true, reachedEnd: false,
+    });
+    expect(nextVerseReference({ book: "Revelation", chapter: 22, verse: 21 }, 21)).toEqual({
+      reference: { book: "Revelation", chapter: 22, verse: 21 }, moved: false, reachedEnd: true,
+    });
+    expect(nextVerseReference({ book: "John", chapter: 3, verse: 1 }, 0)).toEqual({
+      reference: { book: "John", chapter: 3, verse: 1 }, moved: false, reachedEnd: false,
     });
   });
 

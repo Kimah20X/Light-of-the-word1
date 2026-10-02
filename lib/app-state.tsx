@@ -27,6 +27,10 @@ type AppStateValue = {
   setOnboardingComplete: (complete: boolean) => void;
   voiceControllerActive: boolean;
   setVoiceControllerActive: (active: boolean) => void;
+  continuousReading: boolean;
+  playbackSequence: number;
+  startContinuousReading: () => void;
+  stopContinuousReading: () => void;
 };
 
 type PersistedState = {
@@ -59,6 +63,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [onboardingComplete, setOnboardingCompleteState] = useState(false);
   const [voiceControllerActive, setVoiceControllerActive] = useState(false);
+  const [continuousReading, setContinuousReading] = useState(false);
+  const [playbackSequence, setPlaybackSequence] = useState(0);
 
   useEffect(() => {
     let alive = true;
@@ -112,6 +118,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const setVoiceControllerActiveState = useCallback((active: boolean) => {
     setVoiceControllerActive(active);
   }, []);
+  const startContinuousReading = useCallback(() => {
+    setPlaybackSequence((current) => current + 1);
+    setContinuousReading(true);
+  }, []);
+  const stopContinuousReading = useCallback(() => setContinuousReading(false), []);
 
   const value = useMemo(() => ({
     reference,
@@ -128,7 +139,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setOnboardingComplete,
     voiceControllerActive,
     setVoiceControllerActive: setVoiceControllerActiveState,
-  }), [reference, setReference, bookmarks, toggleBookmark, saveCurrentBookmark, removeBookmark, preferences, updatePreferences, hydrated, onboardingComplete, setOnboardingComplete, voiceControllerActive, setVoiceControllerActiveState]);
+    continuousReading,
+    playbackSequence,
+    startContinuousReading,
+    stopContinuousReading,
+  }), [reference, setReference, bookmarks, toggleBookmark, saveCurrentBookmark, removeBookmark, preferences, updatePreferences, hydrated, onboardingComplete, setOnboardingComplete, voiceControllerActive, setVoiceControllerActiveState, continuousReading, playbackSequence, startContinuousReading, stopContinuousReading]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

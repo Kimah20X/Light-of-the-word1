@@ -70,7 +70,9 @@ export function useBibleChapter() {
 
   const cacheStale = Boolean(cached && isChapterCacheStale(cached));
   const freshCachedChapter = cached && !cacheStale ? cached : null;
-  const chapter = chapterQuery.data ?? freshCachedChapter;
+  const queryMatchesReference = chapterQuery.data?.book === reference.book && chapterQuery.data.chapter === reference.chapter;
+  const cacheMatchesReference = freshCachedChapter?.book === reference.book && freshCachedChapter.chapter === reference.chapter;
+  const chapter = (queryMatchesReference ? chapterQuery.data : null) ?? (cacheMatchesReference ? freshCachedChapter : null);
   const verse = useMemo(
     () => chapter?.verses.find((item) => item.number === reference.verse) ?? null,
     [chapter?.verses, reference.verse],
@@ -83,7 +85,7 @@ export function useBibleChapter() {
     providerReady: status.isSuccess,
     providerError: status.error,
     isLoading: !cacheReady || chapterQuery.isFetching,
-    isOfflineCached: Boolean(freshCachedChapter),
+    isOfflineCached: Boolean(cacheMatchesReference),
     isCacheStale: cacheStale,
     hasProviderIdentity: Boolean(bibleId),
     fumsToken: chapter?.fumsToken ?? null,
