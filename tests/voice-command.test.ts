@@ -27,9 +27,12 @@ describe("voice command parser", () => {
 
   it("supports common movement phrases", () => {
     expect(parseVoiceCommand("Next verse")).toEqual({ type: "nextVerse" });
+    expect(parseVoiceCommand("Previous verse")).toEqual({ type: "previousVerse" });
     expect(parseVoiceCommand("Go back one verse")).toEqual({ type: "previousVerse" });
     expect(parseVoiceCommand("Forward chapter")).toEqual({ type: "nextChapter" });
+    expect(parseVoiceCommand("Next chapter")).toEqual({ type: "nextChapter" });
     expect(parseVoiceCommand("Back chapter")).toEqual({ type: "previousChapter" });
+    expect(parseVoiceCommand("Previous chapter")).toEqual({ type: "previousChapter" });
     expect(parseVoiceCommand("Next book")).toEqual({ type: "nextBook" });
     expect(parseVoiceCommand("Previous book")).toEqual({ type: "previousBook" });
     expect(parseVoiceCommand("Go to chapter four")).toEqual({ type: "goToChapter", chapter: 4 });
@@ -39,12 +42,17 @@ describe("voice command parser", () => {
   });
 
   it("supports reading, repeat, and bookmark aliases", () => {
+    expect(parseVoiceCommand("Read")).toEqual({ type: "read" });
     expect(parseVoiceCommand("Read aloud")).toEqual({ type: "read" });
     expect(parseVoiceCommand("Resume")).toEqual({ type: "read" });
+    expect(parseVoiceCommand("Pause")).toEqual({ type: "pause" });
     expect(parseVoiceCommand("Pause reading")).toEqual({ type: "pause" });
     expect(parseVoiceCommand("Repeat this verse")).toEqual({ type: "repeat" });
     expect(parseVoiceCommand("Bookmark")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Bookmark this verse")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Save this verse")).toEqual({ type: "bookmark" });
     expect(parseVoiceCommand("Remember this verse")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Bookmark current verse")).toEqual({ type: "bookmark" });
     expect(parseVoiceCommand("Save current verse")).toEqual({ type: "bookmark" });
     expect(parseVoiceCommand("Add bookmark")).toEqual({ type: "bookmark" });
   });
@@ -54,6 +62,7 @@ describe("voice command parser", () => {
     expect(parseVoiceCommand("What commands can I say?")).toEqual({ type: "help" });
     expect(parseVoiceCommand("Go home")).toEqual({ type: "home" });
     expect(parseVoiceCommand("Go to settings")).toEqual({ type: "settings" });
+    expect(parseVoiceCommand("Bookmarks")).toEqual({ type: "bookmarks" });
     expect(parseVoiceCommand("Open bookmarks")).toEqual({ type: "bookmarks" });
     expect(parseVoiceCommand("Navigate")).toEqual({ type: "navigate" });
     expect(parseVoiceCommand("Profile")).toEqual({ type: "profile" });
@@ -62,6 +71,7 @@ describe("voice command parser", () => {
   it("supports common speed adjustments", () => {
     expect(parseVoiceCommand("Change reading speed to 1.25×")).toEqual({ type: "speed", value: 1.25 });
     expect(parseVoiceCommand("Faster")).toEqual({ type: "faster" });
+    expect(parseVoiceCommand("Slower")).toEqual({ type: "slower" });
     expect(parseVoiceCommand("Slow down")).toEqual({ type: "slower" });
   });
 
