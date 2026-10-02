@@ -6,13 +6,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { colors } from "@/components/light-ui";
 import { formatReference, useAppState } from "@/lib/app-state";
-import { getBook } from "@/lib/bible-catalog";
-import { parseVoiceCommand, READING_SPEEDS, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "@/lib/voice-command";
+import { BIBLE_BOOKS, getBook } from "@/lib/bible-catalog";
+import { getAdjacentBookReference, parseVoiceCommand, READING_SPEEDS, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "@/lib/voice-command";
 import { useBibleChapter } from "@/lib/use-bible-chapter";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const RESTART_AFTER_SILENCE_MS = 900;
-const VOICE_HELP = "You can say: Open Romans 6, Open John chapter 3 verse 16, Next verse, Previous chapter, Read, Pause, Repeat, Save this verse, Settings, or Help. I will listen for up to one minute, so take your time.";
+const VOICE_HELP = "Try: Open John 3:16, Open Psalms, Go to chapter 4, Go to verse 8, Next verse, Next book, Read, Save this verse, or Settings. Say Help for more.";
 
 export function FloatingVoiceCommand() {
   const { reference, setReference, saveCurrentBookmark, preferences, updatePreferences, voiceControllerActive, setVoiceControllerActive } = useAppState();
@@ -54,8 +54,14 @@ export function FloatingVoiceCommand() {
   }, [clearTimers, setVoiceControllerActive]);
 
   const moveChapter = useCallback((delta: number) => {
-    const chapter = Math.max(1, Math.min(book?.chapters ?? reference.chapter, reference.chapter + delta));
-    const next = { ...reference, chapter, verse: 1 };
+    let next: typeof reference;
+    if (delta > 0 && reference.chapter >= (book?.chapters ?? reference.chapter)) {
+      next = getAdjacentBookReference(reference, 1) ?? { ...reference, verse: 1 };
+    } else if (delta < 0 && reference.chapter <= 1) {
+      next = getAdjacentBookReference(reference, -1) ?? { ...reference, verse: 1 };
+    } else {
+      next = { ...reference, chapter: reference.chapter + delta, verse: 1 };
+    }
     setReference(next);
     return next;
   }, [book?.chapters, reference, setReference]);
@@ -102,7 +108,7 @@ export function FloatingVoiceCommand() {
         interimResults: true,
         continuous: false,
         maxAlternatives: 1,
-        contextualStrings: ["Genesis", "Exodus", "Psalms", "Matthew", "John", "Romans", "Revelation", "chapter", "verse", "bookmark", "settings"],
+        contextualStrings: [...BIBLE_BOOKS.map(({ name }) => name), "chapter", "verse", "next book", "previous book", "bookmark", "bookmarks", "settings", "profile", "navigate", "repeat", "resume", "faster", "slower"],
       });
     } catch {
       sessionDeadline.current = 0;
@@ -165,27 +171,80 @@ export function FloatingVoiceCommand() {
         announceAndListen(`Opening ${formatReference(intent.reference)}.`);
         return;
       case "nextVerse": {
+        if (bible.verseCount > 0 && reference.verse >= bible.verseCount) {
+          const nextBook = reference.book === "Revelation" && reference.chapter >= (book?.chapters ?? reference.chapter);
+          if (nextBook) {
+            announceAndListen("You are at the end of Revelation.");
+            break;
+          }
+          const next = moveChapter(1);
+          announceAndListen(`Next chapter: ${next.book} ${next.chapter}.`);
+          break;
+        }
         const next = { ...reference, verse: reference.verse + 1 };
-        setReference(next);
-        announceAndListen(`Moved to ${formatReference(next)}.`);
+        if (bible.verseCount === 0 || next.verse <= bible.verseCount) setReference(next);
+        announceAndListen(bible.verseCount > 0 && next.verse > bible.verseCount ? "Verse unavailable." : formatReference(next));
         break;
       }
       case "previousVerse": {
-        const previous = { ...reference, verse: Math.max(1, reference.verse - 1) };
+        if (reference.verse <= 1) {
+          announceAndListen("Already at the first verse of this chapter.");
+          break;
+        }
+        const previous = { ...reference, verse: reference.verse - 1 };
         setReference(previous);
-        announceAndListen(`Moved to ${formatReference(previous)}.`);
+        announceAndListen(formatReference(previous));
         break;
       }
       case "nextChapter": {
         const next = moveChapter(1);
-        announceAndListen(`Moved to ${next.book} chapter ${next.chapter}.`);
+        announceAndListen(`${next.book} ${next.chapter}.`);
         break;
       }
       case "previousChapter": {
         const previous = moveChapter(-1);
-        announceAndListen(`Moved to ${previous.book} chapter ${previous.chapter}.`);
+        announceAndListen(`${previous.book} ${previous.chapter}.`);
         break;
       }
+      case "nextBook":
+      case "previousBook": {
+        const destination = getAdjacentBookReference(reference, intent.type === "nextBook" ? 1 : -1);
+        if (!destination) {
+          announceAndListen(intent.type === "nextBook" ? "You are at the last book." : "You are at the first book.");
+          break;
+        }
+        setReference(destination);
+        announceAndListen(destination.book);
+        break;
+      }
+      case "firstVerse":
+        setReference({ ...reference, verse: 1 });
+        announceAndListen("First verse.");
+        break;
+      case "lastVerse":
+        if (!bible.verseCount) {
+          announceAndListen("Verse count is not available yet.");
+          break;
+        }
+        setReference({ ...reference, verse: bible.verseCount });
+        announceAndListen("Last verse.");
+        break;
+      case "goToChapter":
+        if (intent.chapter < 1 || intent.chapter > (book?.chapters ?? 0)) {
+          announceAndListen(`That chapter is not in ${reference.book}.`);
+          break;
+        }
+        setReference({ ...reference, chapter: intent.chapter, verse: 1 });
+        announceAndListen(`${reference.book} ${intent.chapter}.`);
+        break;
+      case "goToVerse":
+        if (intent.verse < 1 || (bible.verseCount > 0 && intent.verse > bible.verseCount)) {
+          announceAndListen("That verse is outside this chapter.");
+          break;
+        }
+        setReference({ ...reference, verse: intent.verse });
+        announceAndListen(formatReference({ ...reference, verse: intent.verse }));
+        break;
       case "read":
       case "repeat": {
         const text = bible.verseText;
@@ -218,31 +277,39 @@ export function FloatingVoiceCommand() {
         break;
       case "home":
         router.navigate("/");
-        announceAndListen("Opening Home.");
+        announceAndListen("Home.");
+        return;
+      case "navigate":
+        router.navigate("/(tabs)/navigate");
+        announceAndListen("Navigate.");
         return;
       case "settings":
         router.navigate("/(tabs)/settings");
-        announceAndListen("Opening Settings.");
+        announceAndListen("Settings.");
         return;
       case "bookmarks":
         router.navigate("/(tabs)/bookmarks");
-        announceAndListen("Opening Bookmarks.");
+        announceAndListen("Bookmarks.");
         return;
       case "profile":
         router.navigate("/profile");
-        announceAndListen("Opening Profile.");
+        announceAndListen("Profile.");
         return;
       case "speed":
         updatePreferences({ speed: intent.value });
-        announceAndListen(`Reading speed set to ${intent.value} times.`);
+        announceAndListen(`${intent.value} times speed.`);
         break;
       case "faster":
       case "slower": {
         const currentIndex = READING_SPEEDS.indexOf(preferences.speed as (typeof READING_SPEEDS)[number]);
         const nextIndex = Math.max(0, Math.min(READING_SPEEDS.length - 1, currentIndex + (intent.type === "faster" ? 1 : -1)));
         const speed = READING_SPEEDS[nextIndex];
+        if (speed === preferences.speed) {
+          announceAndListen(intent.type === "faster" ? "Already at fastest speed." : "Already at slowest speed.");
+          break;
+        }
         updatePreferences({ speed });
-        announceAndListen(`Reading speed set to ${speed} times.`);
+        announceAndListen(`${speed} times speed.`);
         break;
       }
       case "help":
@@ -252,7 +319,7 @@ export function FloatingVoiceCommand() {
         break;
     }
     setCommand("");
-  }, [announceAndListen, bible.isLoading, bible.verseText, clearTimers, moveChapter, preferences, reference, saveCurrentBookmark, setReference, speakHelp, updatePreferences]);
+  }, [announceAndListen, bible.isLoading, bible.verseCount, bible.verseText, clearTimers, moveChapter, book?.chapters, preferences, reference, saveCurrentBookmark, setReference, speakHelp, updatePreferences]);
 
   useSpeechRecognitionEvent("start", () => {
     setListening(true);

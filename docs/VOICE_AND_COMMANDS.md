@@ -22,15 +22,17 @@ Speech recognition is provided by the browser/OS service rather than the Express
 
 | Purpose | Examples |
 |---|---|
-| Open a reference | `Open Romans 6`, `Open John 3:16`, `Open John chapter 3 verse 16` |
-| Move reading position | `Next verse`, `Previous verse`, `Next chapter`, `Previous chapter` |
-| Read controls | `Read`, `Pause`, `Resume`, `Repeat` |
-| Local bookmark | `Bookmark this verse`, `Save this verse`, `Save current verse`, `Add bookmark` |
-| App navigation | `Home`, `Settings`, `Bookmarks`, `Profile` |
-| Reading rate | `Faster`, `Slower`, `Change speed to 1.25` |
+| Open a reference | `Open Romans 6`, `Open John 3:16`, `Take me to John chapter three verse sixteen`, `Open Psalms` |
+| Move reading position | `Next verse`, `Go back one verse`, `Next chapter`, `Next book`, `Go to chapter four`, `Go to verse 8`, `First verse`, `Last verse` |
+| Read controls | `Read aloud`, `Pause reading`, `Resume`, `Repeat this verse` |
+| Local bookmark | `Bookmark this verse`, `Save current verse`, `Remember this verse`, `Add bookmark` |
+| App navigation | `Home`, `Navigate`, `Settings`, `Bookmarks`, `Profile` |
+| Reading rate | `Faster`, `Slow down`, `Change speed to 1.25` |
 | Spoken instructions | `Help`, `What commands can I say?` |
 
-Recognition quality varies. The controller displays the transcript and gives a spoken confirmation so the reader can tell what it heard. If the reference was misheard, try again or use the keyboard button. Commands are local app actions; they do not send a conversation or scripture question to an AI service.
+Recognition quality varies. The controller displays the transcript and gives short spoken confirmations so the reader can tell what it heard and quickly continue. It supplies all Bible book names and common commands as recognition hints. If the reference was misheard, try again or use the keyboard button. Commands are local app actions; they do not send a conversation or scripture question to an AI service.
+
+Chapter changes continue into the adjacent Bible book at book boundaries, and verse changes stop at known chapter boundaries rather than selecting a nonexistent verse. `Last verse` and numeric verse validation use the verse count when the chapter has loaded. On the first/last Bible book or when no verse count is available, the controller explains the boundary instead of guessing.
 
 Save/bookmark commands add the **currently displayed verse** to the device-local Bookmarks list for later reading. Repeating the command confirms it is already saved; it never removes the verse. The Reader's bookmark button remains a separate toggle for adding/removing a saved verse.
 
