@@ -22,13 +22,13 @@ Speech recognition is provided by the browser/OS service rather than the Express
 
 | Purpose | Examples |
 |---|---|
-| Open a reference | `Open Romans 6`, `Open John 3:16`, `Open John chapter 3 verse 16` |
-| Move reading position | `Next verse`, `Previous verse`, `Next chapter`, `Previous chapter` |
-| Read controls | `Read`, `Pause`, `Resume`, `Repeat` |
-| Local bookmark | `Bookmark this verse`, `Save this verse`, `Save current verse`, `Add bookmark` |
-| App navigation | `Home`, `Settings`, `Bookmarks`, `Profile` |
-| Reading rate | `Faster`, `Slower`, `Change speed to 1.25` |
-| Spoken instructions | `Help`, `What commands can I say?` |
+| Open Reader or a reference | `Open Bible`, `Read the Bible`, `Open Romans 6`, `John 3:16`, `John chapter three verse sixteen`, `John three sixteen`, `First Corinthians thirteen four`, `Psalm twenty-three` |
+| Move reading position | `Next verse`, `Move to the next verse`, `Previous verse`, `Next chapter`, `Go to the previous chapter` |
+| Read controls | `Read`, `Read this passage`, `Pause`, `Resume`, `Repeat`, `Say that again` |
+| Local bookmark | `Bookmark this verse`, `Save this verse`, `Mark this verse`, `Save my place`, `Add bookmark` |
+| App navigation | `Home`, `Go home`, `Open my bookmarks`, `Show settings`, `Profile` |
+| Reading rate | `Faster`, `Speed up`, `Slower`, `Slow down`, `Set speed to 1.25 times` |
+| Spoken instructions | `Help`, `Show commands`, `What commands can I say?` |
 
 Recognition quality varies. The controller displays the transcript and gives a spoken confirmation so the reader can tell what it heard. If the reference was misheard, try again or use the keyboard button. Commands are local app actions; they do not send a conversation or scripture question to an AI service.
 
@@ -50,4 +50,4 @@ The direct-listening session is capped at one minute to avoid leaving the microp
 
 Read-aloud availability follows the KJV provider/cache setup. A first-time chapter download requires internet; once fetched, eligible chapters are stored locally for offline reading subject to the provider's refresh window. See [`SETUP.md`](SETUP.md).
 
-The voice parser remains local and supports direct references and explicit app commands. An automatic always-listening wake word is intentionally not used: it can keep a microphone active continuously and requires platform-specific background behavior. The user starts the controller with a single deliberate tap.
+The voice parser remains local and supports direct references with numeric or spoken number words, common spoken ordinal books (for example, “First Corinthians”), and explicit app commands. Verse movement advances to the next chapter when the final numbered verse is known, while chapter movement respects book boundaries. An automatic always-listening wake word is intentionally not used: it can keep a microphone active continuously and requires platform-specific background behavior. The user starts the controller with a single deliberate tap.

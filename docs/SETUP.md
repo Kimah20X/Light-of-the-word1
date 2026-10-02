@@ -44,7 +44,7 @@ Email verification, password-reset delivery, and cloud sync for reading history/
 
 ## Speech-recognition build requirement
 
-The floating microphone now supports one-utterance platform speech recognition and typed fallback. Native recognition requires a custom Expo development build; Expo Go does not bundle this native module. Permissions are in `app.config.ts`. Build/install a development client with EAS or the appropriate local Android/iOS toolchain. Follow [`VOICE_AND_COMMANDS.md`](VOICE_AND_COMMANDS.md) for OS/browser permission prompts and recognition limitations.
+The floating microphone starts a direct-listening, pause-tolerant voice-command session (up to one minute per activation), with spoken help/confirmations and typed fallback. Native recognition requires a custom Expo development build; Expo Go does not bundle this native module. Permissions are in `app.config.ts`. Build/install a development client with EAS or the appropriate local Android/iOS toolchain. Follow [`VOICE_AND_COMMANDS.md`](VOICE_AND_COMMANDS.md) for command examples, OS/browser permission prompts, and recognition limitations.
 
 ## `.vpc` files
 

@@ -37,7 +37,10 @@ export default function LoginScreen() {
         <Field label="Email address" value={email} onChangeText={setEmail} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" accessibilityHint="Enter the email address for your account" editable={!busy} />
         <Field label="Password" value={password} onChangeText={setPassword} placeholder="Enter your password" secureTextEntry autoComplete="current-password" textContentType="password" accessibilityHint="Enter your account password" editable={!busy} onSubmitEditing={submit} />
         <PrimaryButton label={busy ? "Signing in…" : "Sign in"} icon="log-in-outline" onPress={submit} disabled={busy} hint="Signs in to your Light of the Word account" />
-      
+        <Pressable accessibilityRole="button" accessibilityLabel="Continue with Manus" accessibilityHint="Opens the existing secure Manus sign-in" onPress={() => { void startOAuthLogin().catch(() => setMessage("Could not open Manus sign-in. Please try again.")); }} style={({ pressed }) => [styles.oauthButton, pressed && styles.pressed]}>
+          <Ionicons name="shield-checkmark-outline" size={18} color={colors.tealBright} />
+          <Text style={styles.oauthText}>Continue with Manus</Text>
+        </Pressable>
         <View style={styles.signupLine}><Text style={styles.muted}>New to Light of the Word?</Text><Pressable accessibilityRole="link" accessibilityLabel="Create a new account" onPress={() => router.push("/signup")}><Text style={styles.link}> Sign up</Text></Pressable></View>
         <Pressable accessibilityRole="link" accessibilityLabel="Return to profile" onPress={() => router.replace("/profile")} style={styles.back}><Text style={styles.backText}>Back to profile</Text></Pressable>
       </View>

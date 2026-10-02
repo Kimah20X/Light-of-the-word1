@@ -38,12 +38,106 @@ export const BIBLE_BOOKS: BibleBook[] = [
   { name: "Revelation", chapters: 22, testament: "New Testament" },
 ];
 
+const BOOKS_BY_LONGEST_NAME = [...BIBLE_BOOKS].sort((a, b) => b.name.length - a.name.length);
+
 export function getBook(name: string) {
   return BIBLE_BOOKS.find((book) => book.name.toLowerCase() === name.toLowerCase());
 }
 
+const SMALL_NUMBERS: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
+  ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
+  seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+  sixty: 60, seventy: 70, eighty: 80, ninety: 90,
+};
+
+function parseNumberWords(phrase: string): number | null {
+  const tokens = phrase.toLowerCase().trim().replace(/-/g, " ").split(/\s+/).filter(Boolean);
+  if (tokens.at(-1) === "and" || tokens.includes("and") && tokens[1] !== "hundred") return null;
+  if (tokens[1] === "hundred") {
+    const hundreds = SMALL_NUMBERS[tokens[0]];
+    if (hundreds === undefined || hundreds < 1 || hundreds > 9) return null;
+    const remainder = tokens.slice(2);
+    if (remainder[0] === "and") remainder.shift();
+    if (!remainder.length) return hundreds * 100;
+    const belowHundred = parseNumberWords(remainder.join(" "));
+    return belowHundred !== null && belowHundred < 100 ? hundreds * 100 + belowHundred : null;
+  }
+  if (tokens.length === 1) return SMALL_NUMBERS[tokens[0]] ?? null;
+  if (tokens.length === 2) {
+    const tens = SMALL_NUMBERS[tokens[0]];
+    const units = SMALL_NUMBERS[tokens[1]];
+    return tens !== undefined && tens >= 20 && tens % 10 === 0 && units !== undefined && units >= 1 && units <= 9
+      ? tens + units
+      : null;
+  }
+  return null;
+}
+
+function asNumber(text: string) {
+  const trimmed = text.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  return parseNumberWords(trimmed);
+}
+
+function normalizeOrdinalBook(input: string) {
+  const allowedBooks = "samuel|kings|chronicles|corinthians|thessalonians|timothy|peter|john";
+  return input
+    .replace(new RegExp(`^(?:first|1st)\\s+(${allowedBooks})\\b`, "i"), "1 $1")
+    .replace(new RegExp(`^(?:second|2nd)\\s+(${allowedBooks})\\b`, "i"), "2 $1")
+    .replace(/^(?:third|3rd)\s+john\b/i, "3 John");
+}
+
+function normalizeSpokenReference(input: string) {
+  const ordinalized = normalizeOrdinalBook(input.trim().replace(/,/g, " "))
+    .replace(/^psalm(?=\s)/i, "Psalms")
+    .replace(/^song of songs(?=\s)/i, "Song of Solomon");
+  const book = BOOKS_BY_LONGEST_NAME.find((item) =>
+    ordinalized.toLowerCase().startsWith(`${item.name.toLowerCase()} `),
+  );
+  if (!book) return ordinalized;
+
+  const suffix = ordinalized.slice(book.name.length).trim();
+  if (!suffix) return ordinalized;
+  if (!/\s/.test(suffix)) {
+    const chapter = asNumber(suffix);
+    if (chapter !== null && chapter >= 1 && chapter <= book.chapters) return `${book.name} ${chapter}`;
+    return ordinalized;
+  }
+
+  const marked = suffix.match(/^chapter\s+(.+?)\s+verse\s+(.+)$/i);
+  if (marked) {
+    const chapter = asNumber(marked[1]);
+    const verse = asNumber(marked[2]);
+    if (chapter !== null && verse !== null) return `${book.name} ${chapter}:${verse}`;
+    return ordinalized;
+  }
+
+  const chapterMarker = suffix.match(/^chapter\s+(.+)$/i);
+  if (chapterMarker) {
+    const chapter = asNumber(chapterMarker[1]);
+    if (chapter !== null) return `${book.name} ${chapter}`;
+    return ordinalized;
+  }
+
+  const tokens = suffix.toLowerCase().replace(/-/g, " ").split(/\s+/).filter(Boolean);
+  if (!tokens.length || tokens.some((token) => token.includes(":"))) return ordinalized;
+  const wholeNumber = asNumber(tokens.join(" "));
+  if (wholeNumber !== null && wholeNumber >= 1 && wholeNumber <= book.chapters) return `${book.name} ${wholeNumber}`;
+  if (tokens.length < 2) return ordinalized;
+  for (let split = tokens.length - 1; split > 0; split--) {
+    const chapter = asNumber(tokens.slice(0, split).join(" "));
+    const verse = asNumber(tokens.slice(split).join(" "));
+    if (chapter !== null && chapter >= 1 && chapter <= book.chapters && verse !== null && verse >= 1) {
+      return `${book.name} ${chapter}:${verse}`;
+    }
+  }
+
+  return ordinalized;
+}
+
 export function parseBibleReference(input: string) {
-  const normalized = input.trim()
+  const normalized = normalizeSpokenReference(input).trim()
     .replace(/\bchapter\s+/gi, " ")
     .replace(/\bverse\s+/gi, ":")
     .replace(/\bcolon\b/gi, ":")

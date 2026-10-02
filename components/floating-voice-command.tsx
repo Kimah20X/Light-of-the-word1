@@ -6,16 +6,15 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from "react-native";
 import { colors } from "@/components/light-ui";
 import { formatReference, useAppState } from "@/lib/app-state";
-import { getBook } from "@/lib/bible-catalog";
-import { parseVoiceCommand, READING_SPEEDS, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "@/lib/voice-command";
+import { moveChapterReference, parseVoiceCommand, READING_SPEEDS, shouldResumeAfterPause, VOICE_LISTENING_WINDOW_MS } from "@/lib/voice-command";
 import { useBibleChapter } from "@/lib/use-bible-chapter";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const RESTART_AFTER_SILENCE_MS = 900;
-const VOICE_HELP = "You can say: Open Romans 6, Open John chapter 3 verse 16, Next verse, Previous chapter, Read, Pause, Repeat, Save this verse, Settings, or Help. I will listen for up to one minute, so take your time.";
+const VOICE_HELP = "Try: Open Bible; John three sixteen; next verse; next chapter; read, pause, repeat; save my place; open my bookmarks; faster, slower; or Settings. Say Help to hear this list again. I will listen for one minute, so take your time.";
 
 export function FloatingVoiceCommand() {
-  const { reference, setReference, saveCurrentBookmark, preferences, updatePreferences, voiceControllerActive, setVoiceControllerActive } = useAppState();
+  const { reference, setReference, saveCurrentBookmark, preferences, updatePreferences, setOnboardingComplete, voiceControllerActive, setVoiceControllerActive } = useAppState();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const viewport = useWindowDimensions();
@@ -33,7 +32,6 @@ export function FloatingVoiceCommand() {
   const recognitionAllowed = useRef(false);
   const restartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const windowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const book = getBook(reference.book);
 
   const clearTimers = useCallback(() => {
     if (restartTimer.current) clearTimeout(restartTimer.current);
@@ -54,11 +52,10 @@ export function FloatingVoiceCommand() {
   }, [clearTimers, setVoiceControllerActive]);
 
   const moveChapter = useCallback((delta: number) => {
-    const chapter = Math.max(1, Math.min(book?.chapters ?? reference.chapter, reference.chapter + delta));
-    const next = { ...reference, chapter, verse: 1 };
-    setReference(next);
-    return next;
-  }, [book?.chapters, reference, setReference]);
+    const result = moveChapterReference(reference, delta === -1 ? -1 : 1);
+    if (result.moved) setReference(result.reference);
+    return result;
+  }, [reference, setReference]);
 
   const startRecognizer = useCallback(async () => {
     if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
@@ -160,11 +157,22 @@ export function FloatingVoiceCommand() {
     }
     setCommand("");
     switch (intent.type) {
+      case "openReader":
+        setOnboardingComplete(true);
+        router.replace("/");
+        announceAndListen("Opening the Bible Reader.");
+        return;
       case "open":
         setReference(intent.reference);
         announceAndListen(`Opening ${formatReference(intent.reference)}.`);
         return;
       case "nextVerse": {
+        if (bible.verseCount > 0 && reference.verse >= bible.verseCount) {
+          const result = moveChapter(1);
+          if (result.moved) announceAndListen(`That was the last verse. Moving to ${result.reference.book} chapter ${result.reference.chapter}, verse 1.`);
+          else announceAndListen("You are at the last verse in Revelation. There is no next verse.");
+          break;
+        }
         const next = { ...reference, verse: reference.verse + 1 };
         setReference(next);
         announceAndListen(`Moved to ${formatReference(next)}.`);
@@ -177,13 +185,17 @@ export function FloatingVoiceCommand() {
         break;
       }
       case "nextChapter": {
-        const next = moveChapter(1);
-        announceAndListen(`Moved to ${next.book} chapter ${next.chapter}.`);
+        const result = moveChapter(1);
+        announceAndListen(result.moved
+          ? `Moved to ${result.reference.book} chapter ${result.reference.chapter}.`
+          : "You are at the final chapter in Revelation.");
         break;
       }
       case "previousChapter": {
-        const previous = moveChapter(-1);
-        announceAndListen(`Moved to ${previous.book} chapter ${previous.chapter}.`);
+        const result = moveChapter(-1);
+        announceAndListen(result.moved
+          ? `Moved to ${result.reference.book} chapter ${result.reference.chapter}.`
+          : "You are at Genesis chapter 1, the first chapter in the Bible.");
         break;
       }
       case "read":
@@ -252,7 +264,7 @@ export function FloatingVoiceCommand() {
         break;
     }
     setCommand("");
-  }, [announceAndListen, bible.isLoading, bible.verseText, clearTimers, moveChapter, preferences, reference, saveCurrentBookmark, setReference, speakHelp, updatePreferences]);
+  }, [announceAndListen, bible.isLoading, bible.verseCount, bible.verseText, clearTimers, moveChapter, preferences, reference, saveCurrentBookmark, setOnboardingComplete, setReference, speakHelp, updatePreferences]);
 
   useSpeechRecognitionEvent("start", () => {
     setListening(true);
