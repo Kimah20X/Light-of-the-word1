@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Speech from "expo-speech";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { AccessibilityInfo, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { Card, colors, IconButton, Screen, SectionTitle } from "@/components/light-ui";
 import { formatReference, useAppState } from "@/lib/app-state";
@@ -9,6 +9,7 @@ import { getPreviewVerseText } from "@/lib/preview-verses";
 import { useBibleChapter } from "@/lib/use-bible-chapter";
 import { ApiBibleFumsReporter } from "@/components/api-bible-fums";
 import { nextVerseReference } from "@/lib/voice-command";
+import { getScriptureSpeechLocale } from "@/lib/voice-language";
 
 export default function ReaderScreen() {
   const { reference, setReference, toggleBookmark, isBookmarked, preferences, updatePreferences, continuousReading, playbackSequence, startContinuousReading, stopContinuousReading, setVoiceControllerActive } = useAppState();
@@ -26,6 +27,22 @@ export default function ReaderScreen() {
         ? "This saved chapter is outside its 30-day cache period; connect to refresh it."
         : "Add the API.Bible project secrets to load the full KJV. Any sample text shown here is preview-only.");
   const progressWidth = `${Math.min(100, Math.round((reference.chapter / (book?.chapters ?? reference.chapter)) * 100))}%` as `${number}%`;
+  const lastAutoPlayChapter = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!preferences.autoplay) {
+      lastAutoPlayChapter.current = null;
+      return;
+    }
+    if (!verseText) return;
+    const chapterKey = `${reference.book}:${reference.chapter}`;
+    if (lastAutoPlayChapter.current === chapterKey) return;
+    lastAutoPlayChapter.current = chapterKey;
+    if (!continuousReading) {
+      startContinuousReading();
+      setVoiceControllerActive(true);
+    }
+  }, [continuousReading, preferences.autoplay, reference.book, reference.chapter, setVoiceControllerActive, startContinuousReading, verseText]);
 
   const offlineStatus = !bible.providerReady
     ? bible.hasProviderIdentity ? "Provider unavailable · saved chapters are local" : "Checking Bible provider"
@@ -44,7 +61,7 @@ export default function ReaderScreen() {
       stopContinuousReading();
       setVoiceControllerActive(false);
       AccessibilityInfo.announceForAccessibility(unavailable);
-      Speech.speak(unavailable, { language: preferences.language === "Hausa" ? "ha-NG" : "en-US" });
+      Speech.speak(unavailable, { language: getScriptureSpeechLocale() });
       return () => { cancelled = true; };
     }
 
@@ -52,7 +69,7 @@ export default function ReaderScreen() {
       if (cancelled) return;
       Speech.speak(`${key}. ${verseText}`, {
         rate: preferences.speed,
-        language: preferences.language === "Hausa" ? "ha-NG" : "en-US",
+        language: getScriptureSpeechLocale(),
         volume: 1,
         onDone: () => {
           if (cancelled) return;
@@ -67,7 +84,7 @@ export default function ReaderScreen() {
             ? "You have reached the final verse of Revelation. Reading is complete."
             : "The next verse is not available in this chapter. Reading has stopped.";
           AccessibilityInfo.announceForAccessibility(ending);
-          Speech.speak(ending, { language: preferences.language === "Hausa" ? "ha-NG" : "en-US" });
+          Speech.speak(ending, { language: getScriptureSpeechLocale() });
         },
         onError: () => {
           if (cancelled) return;
@@ -82,7 +99,7 @@ export default function ReaderScreen() {
       cancelled = true;
       void Speech.stop();
     };
-  }, [bible.isLoading, bible.verseCount, continuousReading, key, playbackSequence, preferences.language, preferences.speed, reference, setReference, setVoiceControllerActive, stopContinuousReading, verseText]);
+  }, [bible.isLoading, bible.verseCount, continuousReading, key, playbackSequence, preferences.speed, reference, setReference, setVoiceControllerActive, stopContinuousReading, verseText]);
 
   const togglePlayback = () => {
     if (continuousReading) {

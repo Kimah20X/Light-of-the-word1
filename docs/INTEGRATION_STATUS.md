@@ -1,24 +1,24 @@
 # Integration status
 
-**Last checked:** 2026-10-02. This records observed checks, not guarantees about a later deploy.
+**Last checked:** 2026-10-03. Results are point-in-time checks and do not guarantee availability on a later deploy.
 
-## Verified working
+## Verified
 
-- WebDev Express health endpoint responds successfully.
-- The running WebDev API reports API.Bible configured; a direct `bible.chapter` request returned Romans 6 with 23 verses, and verse 2 matched the expected KJV text.
-- A prior standalone `pnpm test:integration` API.Bible test passed. The most recent standalone repeat timed out while checking edition metadata; the separate request to the running WebDev API still returned real KJV text. This points to an intermittent environment/network difference, not proof of uninterrupted provider access.
-- Bible references, including number-word references such as `John three sixteen` and spoken book ordinals such as `First Corinthians thirteen four`, are parsed locally and have unit tests.
-- Common short navigation, reading, speed, help, and save-bookmark commands have parser coverage. Spoken save is idempotent and targets the displayed verse. Chapter stepping is tested across book boundaries.
-- EAS build configuration parses through Expo; no environment files are tracked.
-- Local automated checks: 29 tests passed; 3 integration/environment-dependent tests skipped in the normal suite; TypeScript, lint, Expo dependency checks, Express bundle, and static web export passed.
+- The live API.Bible test fetched the real English KJV Romans 6 chapter, and the live MongoDB test authenticated and returned a ping from the configured database.
+- The voice parser and language helper have unit coverage. Voice-controller startup, spoken language changes, and Android recognizer selection were reviewed; preview microphone permission behavior is described below.
+- The Reader can continue through verses and chapters, stop on spoken Stop/Pause, and keep verse bookmarks local. `VOICE_COMMANDS_README.md` contains the supported voice phrases.
 
-## Not verified / currently blocked
+## Not verified yet
 
-- **MongoDB:** the live authenticated ping fails during TLS connection negotiation both in the standalone test and in the running account API (a read-only login probe returned HTTP 503). Do not treat password signup/login as available until a fresh ping succeeds. The root cause is not established; review Atlas Network Access, cluster state, credentials/URI encoding, and server egress. TLS certificate verification has not been disabled.
-- An actual signup/account write, session login, and logout against MongoDB have not been tested because connectivity is failing.
-- Native speech recognition requires a custom Expo development build. A native EAS build and real-device permission/recognition test were not run as part of these checks; web and unit tests do not prove device behavior.
-- The existing OAuth logout test remains skipped in the ordinary test suite. The Manus OAuth login option has been preserved in the login screen, but this run did not validate the full external OAuth flow.
+- A live authenticated ping does not prove account registration, password login, session renewal, and logout end-to-end; test those only with a dedicated test account and non-production database.
+- **Voice on a physical iOS/Android device is not verified.** The sandbox preview browser denied microphone/speech access; it displayed an accessible permission error and Listen again. That is a sandbox browser restriction, not evidence about the user's device. Native recognition requires a custom Expo development build; the current build has not been run on a physical device with granted permissions.
+- Speech recognition quality and available English/Hausa/Yoruba/Igbo models depend on the device, operating-system recognizer, installed language model, microphone, and environment. Mic gain is not adjustable by this Expo module.
+- Language selection changes command recognition when the locale is supported; Bible content remains English KJV and most screen labels are in English.
 
-## Safe next check
+## Recommended acceptance checks
 
-After correcting Atlas/network access, run `pnpm test:integration` from the repository root more than once if the provider request times out. Only after its MongoDB ping passes, perform a separate account signup/login/logout smoke test in a dedicated non-production database. Never solve a TLS handshake failure by disabling certificate checks or using an unrestricted network allow-list as a default.
+1. Run `pnpm test:integration`; expect both real-service checks to pass.
+2. In a dedicated non-production database, separately test signup/login/logout with a non-sensitive test account.
+3. Build the configured Expo development build, install on a physical device, grant both microphone and speech-recognition permissions, and test voice commands from onboarding, language switch/fallback, continuous KJV playback, and spoken Stop mid-narration with VoiceOver/TalkBack.
+
+Never debug a TLS issue by disabling certificate validation or broadly allowing every source address. Do not publish API keys, connection strings, or test-account passwords.

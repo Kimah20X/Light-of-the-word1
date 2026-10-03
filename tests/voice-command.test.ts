@@ -17,6 +17,18 @@ describe("voice command parser", () => {
       type: "open",
       reference: { book: "John", chapter: 3, verse: 16 },
     });
+    expect(parseVoiceCommand("John three sixteen")).toEqual({
+      type: "open",
+      reference: { book: "John", chapter: 3, verse: 16 },
+    });
+    expect(parseVoiceCommand("John chapter three verse sixteen")).toEqual({
+      type: "open",
+      reference: { book: "John", chapter: 3, verse: 16 },
+    });
+    expect(parseVoiceCommand("First John one three")).toEqual({
+      type: "open",
+      reference: { book: "1 John", chapter: 1, verse: 3 },
+    });
     expect(parseVoiceCommand("Show me John three sixteen")).toEqual({
       type: "open",
       reference: { book: "John", chapter: 3, verse: 16 },
@@ -67,6 +79,52 @@ describe("voice command parser", () => {
     expect(shouldResumeAfterPause(deadline, 120_001, false)).toBe(true);
     expect(shouldResumeAfterPause(deadline, deadline, false)).toBe(false);
     expect(shouldResumeAfterPause(deadline, 120_001, true)).toBe(false);
+  });
+
+  it("switches language by voice and recognizes localized commands", () => {
+    expect(parseVoiceCommand("Change language to Hausa")).toEqual({ type: "language", value: "Hausa" });
+    expect(parseVoiceCommand("Speak in Yoruba")).toEqual({ type: "language", value: "Yoruba" });
+    expect(parseVoiceCommand("Gbanwee asusu gaa na Igbo")).toEqual({ type: "language", value: "Igbo" });
+    expect(parseVoiceCommand("Bude Bible")).toEqual({ type: "openReader" });
+    expect(parseVoiceCommand("Ṣí Bibeli")).toEqual({ type: "openReader" });
+    expect(parseVoiceCommand("Mepee Bible")).toEqual({ type: "openReader" });
+    expect(parseVoiceCommand("Karanta")).toEqual({ type: "read" });
+    expect(parseVoiceCommand("Aya ta gaba")).toEqual({ type: "nextVerse" });
+    expect(parseVoiceCommand("Ẹsẹ ti o tẹle")).toEqual({ type: "nextVerse" });
+    expect(parseVoiceCommand("Amaokwu ọzọ")).toEqual({ type: "nextVerse" });
+    expect(parseVoiceCommand("Aya ta baya")).toEqual({ type: "previousVerse" });
+    expect(parseVoiceCommand("Ẹsẹ ti o ti kọja")).toEqual({ type: "previousVerse" });
+    expect(parseVoiceCommand("Amaokwu gara aga")).toEqual({ type: "previousVerse" });
+    expect(parseVoiceCommand("Babi na gaba")).toEqual({ type: "nextChapter" });
+    expect(parseVoiceCommand("Orí tí ó tẹ̀lé")).toEqual({ type: "nextChapter" });
+    expect(parseVoiceCommand("Isiakwụkwọ ọzọ")).toEqual({ type: "nextChapter" });
+    expect(parseVoiceCommand("Dúró")).toEqual({ type: "pause" });
+    expect(parseVoiceCommand("Daina")).toEqual({ type: "pause" });
+    expect(parseVoiceCommand("Kwụsị")).toEqual({ type: "pause" });
+    expect(parseVoiceCommand("Chekwaa amaokwu a")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Ajiye wannan aya")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Fi ẹsẹ yìí pamọ́")).toEqual({ type: "bookmark" });
+    expect(parseVoiceCommand("Tun ẹsẹ yii ka")).toEqual({ type: "repeat" });
+    expect(parseVoiceCommand("Maimaita ayar")).toEqual({ type: "repeat" });
+    expect(parseVoiceCommand("Gụọ amaokwu a ọzọ")).toEqual({ type: "repeat" });
+    expect(parseVoiceCommand("Taimako")).toEqual({ type: "help" });
+    expect(parseVoiceCommand("Ìrànlọ́wọ́")).toEqual({ type: "help" });
+    expect(parseVoiceCommand("Enyemaka")).toEqual({ type: "help" });
+    expect(parseVoiceCommand("Canza harshe zuwa Hausa")).toEqual({ type: "language", value: "Hausa" });
+    expect(parseVoiceCommand("Yi ede pada si Yoruba")).toEqual({ type: "language", value: "Yoruba" });
+    expect(parseVoiceCommand("Gbanwee asusu gaa na Igbo")).toEqual({ type: "language", value: "Igbo" });
+  });
+
+  it("supports additional blind-friendly context, navigation, and display commands", () => {
+    expect(parseVoiceCommand("Find First John one three")).toEqual({ type: "open", reference: { book: "1 John", chapter: 1, verse: 3 } });
+    expect(parseVoiceCommand("Read this chapter")).toEqual({ type: "readChapter" });
+    expect(parseVoiceCommand("Go to the beginning of this chapter")).toEqual({ type: "startChapter" });
+    expect(parseVoiceCommand("Where am I?")).toEqual({ type: "currentReference" });
+    expect(parseVoiceCommand("Close voice controller")).toEqual({ type: "closeVoice" });
+    expect(parseVoiceCommand("Set reader text size to large")).toEqual({ type: "fontSize", value: "large" });
+    expect(parseVoiceCommand("Make font smaller")).toEqual({ type: "fontSize", value: "small" });
+    expect(parseVoiceCommand("Turn auto-play on")).toEqual({ type: "autoplay", value: true });
+    expect(parseVoiceCommand("Disable autoplay")).toEqual({ type: "autoplay", value: false });
   });
 
   it("moves chapters across book boundaries and stops at the Bible's ends", () => {

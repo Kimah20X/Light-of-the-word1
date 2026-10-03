@@ -98,7 +98,11 @@ const config: ExpoConfig = {
       {
         microphonePermission: "Allow LIGHT OF THE WORD to use the microphone for voice commands.",
         speechRecognitionPermission: "Allow LIGHT OF THE WORD to recognize Bible navigation and reading commands.",
-        androidSpeechServicePackages: ["com.google.android.googlequicksearchbox"],
+        androidSpeechServicePackages: [
+          "com.google.android.googlequicksearchbox",
+          "com.google.android.as",
+          "com.samsung.android.bixby.agent",
+        ],
       },
     ],
     [

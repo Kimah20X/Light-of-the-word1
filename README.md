@@ -1,6 +1,6 @@
 # LIGHT OF THE WORD
 
-An Expo Router / React Native Bible app with an Express + tRPC API, MongoDB email accounts, an API.Bible KJV adapter, and local-first reading state.
+An Expo Router / React Native Bible app with an Express + tRPC API, MongoDB email accounts, an API.Bible KJV adapter, and local-first reading state. It is built with **voice-first use and screen-reader accessibility** in mind.
 
 ## Project map
 
@@ -11,23 +11,27 @@ An Expo Router / React Native Bible app with an Express + tRPC API, MongoDB emai
 | `backend/` | **The backend:** Express app, tRPC routers, account/auth routes, MongoDB access, API.Bible adapter, and server integrations. Start at `backend/_core/index.ts`. |
 | `shared/` | Types and utilities shared with the backend. |
 | `drizzle/` | Existing scaffold migrations for its legacy SQL/OAuth metadata; MongoDB account data is managed in `backend/`. |
-| `tests/` | Unit tests for the Bible adapter, local command parsing, auth primitives, and existing routes. |
-| `docs/` | Setup and feature guides. Start with [`docs/SETUP.md`](docs/SETUP.md) and [`docs/VOICE_AND_COMMANDS.md`](docs/VOICE_AND_COMMANDS.md). |
+| `tests/` | Unit tests for Bible data, voice commands, locale selection, accounts, and service adapters. |
+| `docs/` | Setup and integration guides. See `docs/SETUP.md`, `docs/INTEGRATION_STATUS.md`, and `docs/VOICE_AND_COMMANDS.md`. |
+| [`VOICE_COMMANDS_README.md`](VOICE_COMMANDS_README.md) | Full voice-first guide: references, playback, navigation, bookmarks, settings, localized phrases, permission recovery, and native device testing. |
 
-## Run locally
+## Run and verify
 
 - `pnpm dev` starts the Expo web preview and Express backend together.
 - `pnpm dev:server` runs only the backend.
 - `pnpm dev:metro` runs only Expo/Metro.
 - `pnpm test && pnpm check && pnpm lint` runs tests and static checks.
+- `pnpm test:integration` runs opt-in live API.Bible and MongoDB checks; it requires configured secrets.
 - `pnpm build` bundles the backend for production; `pnpm start` runs the generated bundle.
 
-Configure server-only credentials using the steps in [`docs/SETUP.md`](docs/SETUP.md). Never put MongoDB credentials or the API.Bible key in `EXPO_PUBLIC_` variables.
+Configure server-only credentials using [`docs/SETUP.md`](docs/SETUP.md). Never put MongoDB credentials or the API.Bible key in `EXPO_PUBLIC_` variables.
 
-## Speech
+## Voice-first access
 
-Verse narration is text-to-speech through `expo-speech`. The floating microphone uses the device/browser speech-recognition service for one spoken command and passes the final transcript to the same local parser used by typed commands. Native recognition requires a custom Expo development build with the config plugin; Expo Go does not contain this native module. See [`docs/VOICE_AND_COMMANDS.md`](docs/VOICE_AND_COMMANDS.md).
+There is no text-entry fallback in the voice controller. Activating its accessible microphone button starts listening directly; spoken command results, status, help, and error/retry guidance are available audibly and to screen readers. It can start from onboarding, change command language by voice, and read the English KJV continuously until **Stop** or **Pause**. Recognition requires a working device/browser speech service and microphone permission. Native use requires a custom Expo development build; Expo Go does not contain the speech-recognition native module.
+
+See [`VOICE_COMMANDS_README.md`](VOICE_COMMANDS_README.md) for every currently supported phrase and physical-device acceptance steps. Language selection changes command recognition; it does **not** translate the KJV Bible text or most screen labels.
 
 ## Data behavior
 
-Bookmarks and preferences stay local. Bible chapters are fetched through the backend and cached on the device subject to the provider's refresh and usage rules. The currently bundled verse samples are only UI-preview content, not a complete KJV Bible.
+Bookmarks and preferences stay local. Bible chapters are fetched through the backend and cached on the device subject to API.Bible's provider terms and refresh policy. Small bundled verse samples are explicitly marked preview content, not a complete KJV dataset.

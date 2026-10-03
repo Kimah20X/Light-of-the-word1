@@ -60,7 +60,7 @@ export default function SettingsScreen() {
               );
             })}
           </View>
-          <Text style={styles.smallNote}>Language preference is saved locally. English, Hausa, Yoruba, and Igbo are ready for interface translations.</Text>
+          <Text style={styles.smallNote}>Language preference is saved on this device and selects the voice-command language when your device speech service supports it. If it does not, voice commands fall back to English. The current Bible text and most screen labels remain in English (KJV).</Text>
         </View>
 
         <View style={styles.section}>

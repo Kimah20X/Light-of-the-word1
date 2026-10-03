@@ -34,9 +34,9 @@ export default function OnboardingScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Text style={styles.voiceHint}>Tap below or say “Open Bible”</Text>
-        <PrimaryButton label="GET STARTED" icon="play" tone="amber" onPress={startReading} hint="Open the Bible reader" />
-        <Pressable accessibilityRole="button" accessibilityLabel="English and Hausa language settings" accessibilityHint="Opens language preferences" onPress={() => router.push("/(tabs)/settings")} style={({ pressed }) => [styles.languageShortcut, pressed && { opacity: 0.7 }]}>
+        <Text accessibilityRole="text" style={styles.voiceHint}>Use the voice button to start listening. Say “Help” for spoken commands or “Open Bible” to begin reading.</Text>
+        <PrimaryButton label="GET STARTED" icon="play" tone="amber" onPress={startReading} hint="Opens the Bible Reader. Your voice button stays available for spoken navigation." />
+        <Pressable accessibilityRole="button" accessibilityLabel="Language settings: English, Hausa, Yoruba, and Igbo" accessibilityHint="Opens voice-command language preferences. Speech-language availability depends on the device." onPress={() => router.push("/(tabs)/settings")} style={({ pressed }) => [styles.languageShortcut, pressed && { opacity: 0.7 }]}>
           <Ionicons name="globe-outline" size={17} color={colors.muted} />
           <Text style={styles.languageText}>English / Hausa</Text>
         </Pressable>
