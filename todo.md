@@ -7,7 +7,7 @@
 - [x] Device-local AsyncStorage cache for previously fetched chapters, subject to the provider's 30-day refresh requirement.
 - [x] MongoDB account/session code under `backend/`; local bookmarks and preferences do not depend on MongoDB.
 - [x] Verse text-to-speech using `expo-speech`.
-- [x] Tap-to-listen voice controller uses `expo-speech-recognition` directly (no command pop-up), allows a one-minute idle window with pause retries, announces transcripts/status to accessibility services, gives spoken help/confirmations, and keeps a typed fallback. Recognition is biased toward Bible names and Stop/Pause; phone/OS controls physical microphone gain.
+- [x] Tap-to-listen voice controller uses `expo-speech-recognition` directly (no command pop-up or typed fallback), allows a one-minute idle window with pause retries, announces transcripts/status to accessibility services, and gives spoken help/confirmations. Recognition is biased toward Bible names and Stop/Pause; phone/OS controls physical microphone gain.
 - [x] Continuous TTS advances verse-by-verse through chapter/book boundaries until Stop/Pause; Reader controls expose accessible stop and repeat actions.
 - [x] Replaced Expo starter assets with an amber open-Bible launcher icon, Android adaptive/monochrome icons, splash mark, and web favicon.
 - [x] Moved the source folder from `server/` to clearly visible `backend/`; updated development/build scripts, client router type import, test imports, and source comments.
@@ -15,15 +15,15 @@
 - [x] Unit tests cover Bible parsing (including spoken `chapter`/`verse` wording), the one-minute listening deadline, voice-command parsing, API.Bible parsing, and account primitives.
 - [x] Voice Save/Bookmark commands save the current verse idempotently, announce saved/already-saved feedback, and persist locally.
 - [x] Backend-local `.env` loading with runtime-secret precedence and Git ignore protection; values configured using the secure project-secrets form.
-- [x] Live API.Bible KJV Romans 6 retrieval passed; nested verse-span parsing corrected; Reader display and chapter cache verified in the browser.
+- [x] Live API.Bible KJV Romans 6 retrieval and authenticated MongoDB ping passed; nested verse-span parsing corrected; Reader display and chapter cache verified in the browser.
 
 ## Remaining — user configuration/device validation
 
-- [ ] Resolve MongoDB TLS/network connectivity: the corrected URI is stored and parseable, but all discovered servers reject the TLS handshake. Check Atlas Network Access and cluster availability before retrying.
+- [x] Live authenticated MongoDB ping passed; account registration/login still needs a separate end-to-end test with a dedicated non-production account.
 - [ ] For native builds, set the public HTTPS backend origin in `EXPO_PUBLIC_API_BASE_URL`, then rebuild the client.
 - [ ] Create/install a custom Expo development build with speech permissions; Expo Go does not include native speech recognition.
 - [ ] On target iOS/Android phones, grant speech/microphone permissions and verify `Open Romans 6`, `Open John chapter 3 verse 16`, `Read` then `Stop` mid-verse, `Next verse`, and `Help`; recognition quality and mic gain remain OS/device-controlled and locales vary.
-- [ ] Test real Mongo account registration/login after the MongoDB connection succeeds. Live Bible fetching is already verified.
+- [ ] Test real Mongo account registration/login/logout with a dedicated non-production account. Live Bible fetching and MongoDB connectivity are already verified.
 - [ ] Confirm translation rights and deployment-specific FUMS requirements before publishing/monetizing.
 
 ## Not included
